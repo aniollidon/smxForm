@@ -58,9 +58,11 @@ function attemptResult(attempt, quiz, questions, answers) {
         text: q.text,
         type: q.type,
         points: q.points,
+        imageUrl: q.imageUrl,
         config: JSON.parse(q.config),
         answerKey: JSON.parse(q.answerKey),
         value: a ? JSON.parse(a.value) : null,
+        fileUrl: a?.fileUrl ?? null,
         score: a?.score ?? null,
         feedback: a?.feedback ?? null,
       };
