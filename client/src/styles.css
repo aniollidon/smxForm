@@ -1,0 +1,29 @@
+:root { font-family: system-ui, sans-serif; color: #1f2937; background: #f3f4f6; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+a { color: #2563eb; }
+header.top { display: flex; justify-content: space-between; align-items: center; padding: 10px 24px; background: #1e3a8a; color: #fff; }
+header.top a { color: #fff; margin-right: 16px; text-decoration: none; }
+main { max-width: 900px; margin: 24px auto; padding: 0 16px; }
+.card { background: #fff; border-radius: 8px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.row.between { justify-content: space-between; }
+.stack > * + * { margin-top: 10px; }
+label { display: block; font-size: 14px; }
+input[type=text], input[type=number], input[type=datetime-local], textarea, select { width: 100%; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 6px; font: inherit; }
+input[type=number] { width: 100px; }
+textarea { min-height: 80px; }
+button { padding: 6px 14px; border: 0; border-radius: 6px; background: #2563eb; color: #fff; cursor: pointer; font: inherit; }
+button.secondary { background: #e5e7eb; color: #111; }
+button.danger { background: #dc2626; }
+button:disabled { opacity: .5; cursor: default; }
+.error { color: #b91c1c; }
+.ok { color: #15803d; }
+.muted { color: #6b7280; font-size: 14px; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 6px; border-bottom: 1px solid #e5e7eb; }
+.imgwrap { position: relative; display: inline-block; max-width: 100%; }
+.imgwrap img { max-width: 100%; display: block; }
+.marker { position: absolute; transform: translate(-50%, -50%); width: 24px; height: 24px; border-radius: 50%; background: #dc2626; color: #fff; font-size: 13px; display: flex; align-items: center; justify-content: center; border: 2px solid #fff; }
+.badge { display: inline-block; padding: 1px 8px; border-radius: 10px; background: #e0e7ff; font-size: 12px; }
+.right { color: #15803d; } .wrong { color: #b91c1c; }

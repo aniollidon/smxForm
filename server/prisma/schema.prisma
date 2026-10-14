@@ -1,0 +1,88 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id           Int       @id @default(autoincrement())
+  email        String    @unique
+  name         String?
+  role         String    @default("STUDENT") // STUDENT | TEACHER
+  googleTokens String? // JSON amb tokens del professor (Classroom)
+  quizzes      Quiz[]
+  attempts     Attempt[]
+  createdAt    DateTime  @default(now())
+}
+
+model Quiz {
+  id                    Int        @id @default(autoincrement())
+  title                 String
+  description           String     @default("")
+  teacherId             Int
+  teacher               User       @relation(fields: [teacherId], references: [id])
+  classroomCourseId     String?
+  classroomCourseWorkId String?
+  maxScore              Float      @default(10)
+  shuffleQuestions      Boolean    @default(false)
+  allowRetry            Boolean    @default(false)
+  maxAttempts           Int        @default(1)
+  negativePenalty       Float      @default(0) // fracció de punts de la pregunta que resta cada error (0 = no resta)
+  gradeToExport         String     @default("BEST") // BEST | LAST
+  showResults           String     @default("SCORE") // NONE | SCORE | FULL
+  showResultsFrom       DateTime? // si està definit, els resultats només es veuen a partir d'aquesta data
+  published             Boolean    @default(false)
+  publicSlug            String     @unique
+  questions             Question[]
+  attempts              Attempt[]
+  createdAt             DateTime   @default(now())
+}
+
+model Question {
+  id             Int      @id @default(autoincrement())
+  quizId         Int
+  quiz           Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  type           String // MCQ | TRUE_FALSE | MATCHING | IMAGE_LABEL | SHORT_TEXT | LONG_TEXT | IMAGE_UPLOAD
+  text           String
+  imageUrl       String?
+  points         Float    @default(1)
+  required       Boolean  @default(false)
+  shuffleOptions Boolean  @default(false)
+  order          Int      @default(0)
+  config         String   @default("{}") // JSON visible a l'alumne
+  answerKey      String   @default("{}") // JSON només professor
+  answers        Answer[]
+}
+
+model Attempt {
+  id          Int       @id @default(autoincrement())
+  quizId      Int
+  quiz        Quiz      @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  userId      Int
+  user        User      @relation(fields: [userId], references: [id])
+  seed        Int
+  startedAt   DateTime  @default(now())
+  submittedAt DateTime?
+  score       Float?
+  status      String    @default("IN_PROGRESS") // IN_PROGRESS | SUBMITTED | NEEDS_REVIEW | GRADED
+  exportedAt  DateTime?
+  answers     Answer[]
+}
+
+model Answer {
+  id          Int      @id @default(autoincrement())
+  attemptId   Int
+  attempt     Attempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  questionId  Int
+  question    Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  value       String   @default("null") // JSON
+  fileUrl     String?
+  score       Float?
+  needsReview Boolean  @default(false)
+  feedback    String?
+
+  @@unique([attemptId, questionId])
+}

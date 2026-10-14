@@ -1,0 +1,144 @@
+import React, { useState } from 'react';
+import { upload, fileUrl } from '../api';
+import { ImageWithPoints } from './QuestionInput.jsx';
+import { TYPE_LABELS, uid, toPayload, validateDraft } from '../questionModel';
+
+export default function QuestionEditor({ initial, onSave, onCancel }) {
+  const [d, setD] = useState(initial);
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const set = (patch) => setD((x) => ({ ...x, ...patch }));
+
+  const uploadImage = async (file) => {
+    try {
+      const r = await upload('/api/files/question-image', file);
+      set({ imageUrl: r.imageUrl });
+    } catch (e) {
+      setErr(e.message);
+    }
+  };
+
+  const save = async () => {
+    const v = validateDraft(d);
+    if (v) return setErr(v);
+    setBusy(true);
+    try {
+      await onSave(toPayload(d), d.id);
+    } catch (e) {
+      setErr(e.message);
+      setBusy(false);
+    }
+  };
+
+  const addPoint = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = Math.round(((e.clientX - rect.left) / rect.width) * 1000) / 10;
+    const y = Math.round(((e.clientY - rect.top) / rect.height) * 1000) / 10;
+    set({ points_: [...d.points_, { id: uid(), x, y, label: '' }] });
+  };
+
+  return (
+    <div className="card stack" style={{ border: '2px solid #2563eb' }}>
+      <b>{TYPE_LABELS[d.type]}</b>
+      <label>Enunciat<textarea value={d.text} onChange={(e) => set({ text: e.target.value })} /></label>
+      <div className="row">
+        <label>Punts <input type="number" min="0" step="0.25" value={d.points} onChange={(e) => set({ points: e.target.value })} /></label>
+        <label><input type="checkbox" checked={d.required} onChange={(e) => set({ required: e.target.checked })} /> Obligatòria</label>
+        {['MCQ', 'MATCHING', 'IMAGE_LABEL'].includes(d.type) && (
+          <label><input type="checkbox" checked={d.shuffleOptions} onChange={(e) => set({ shuffleOptions: e.target.checked })} /> Respostes en ordre aleatori</label>
+        )}
+      </div>
+
+      {d.type !== 'IMAGE_LABEL' && d.type !== 'IMAGE_UPLOAD' && (
+        <div>
+          <label>Imatge (opcional) <input type="file" accept="image/*" onChange={(e) => e.target.files[0] && uploadImage(e.target.files[0])} /></label>
+          {d.imageUrl && <img src={fileUrl(d.imageUrl)} alt="" style={{ maxWidth: 200 }} />}
+        </div>
+      )}
+
+      {d.type === 'MCQ' && (
+        <div className="stack">
+          <label><input type="checkbox" checked={d.multiple} onChange={(e) => set({ multiple: e.target.checked })} /> Permet múltiples respostes</label>
+          {d.opts.map((o, i) => (
+            <div className="row" key={o.id}>
+              <input
+                type={d.multiple ? 'checkbox' : 'radio'}
+                checked={o.correct}
+                title="Correcta"
+                onChange={(e) =>
+                  set({ opts: d.opts.map((x) => (x.id === o.id ? { ...x, correct: e.target.checked } : d.multiple ? x : { ...x, correct: false })) })
+                }
+              />
+              <input type="text" style={{ flex: 1, width: 'auto' }} placeholder={`Opció ${String.fromCharCode(65 + i)}`} value={o.text} onChange={(e) => set({ opts: d.opts.map((x) => (x.id === o.id ? { ...x, text: e.target.value } : x)) })} />
+              {d.opts.length > 2 && <button className="secondary" onClick={() => set({ opts: d.opts.filter((x) => x.id !== o.id) })}>✕</button>}
+            </div>
+          ))}
+          {d.opts.length < 12 && <button className="secondary" onClick={() => set({ opts: [...d.opts, { id: uid(), text: '', correct: false }] })}>+ Opció</button>}
+        </div>
+      )}
+
+      {d.type === 'TRUE_FALSE' && (
+        <label>Resposta correcta
+          <select value={String(d.correct)} onChange={(e) => set({ correct: e.target.value === 'true' })}>
+            <option value="true">Cert</option>
+            <option value="false">Fals</option>
+          </select>
+        </label>
+      )}
+
+      {d.type === 'MATCHING' && (
+        <div className="stack">
+          {d.pairs.map((p, i) => (
+            <div className="row" key={i}>
+              <input type="text" style={{ flex: 1, width: 'auto' }} placeholder="Concepte" value={p.left} onChange={(e) => set({ pairs: d.pairs.map((x, j) => (j === i ? { ...x, left: e.target.value } : x)) })} />
+              <span>→</span>
+              <input type="text" style={{ flex: 1, width: 'auto' }} placeholder="Correspondència" value={p.right} onChange={(e) => set({ pairs: d.pairs.map((x, j) => (j === i ? { ...x, right: e.target.value } : x)) })} />
+              {d.pairs.length > 2 && <button className="secondary" onClick={() => set({ pairs: d.pairs.filter((_, j) => j !== i) })}>✕</button>}
+            </div>
+          ))}
+          <button className="secondary" onClick={() => set({ pairs: [...d.pairs, { left: '', right: '' }] })}>+ Parella</button>
+          <label>Opcions de distracció (una per línia)<textarea value={d.distractors} onChange={(e) => set({ distractors: e.target.value })} /></label>
+        </div>
+      )}
+
+      {d.type === 'IMAGE_LABEL' && (
+        <div className="stack">
+          <label>Imatge <input type="file" accept="image/*" onChange={(e) => e.target.files[0] && uploadImage(e.target.files[0])} /></label>
+          {d.imageUrl && (
+            <>
+              <p className="muted">Clica sobre la imatge per afegir un punt.</p>
+              <ImageWithPoints src={fileUrl(d.imageUrl)} points={d.points_} onClick={addPoint} />
+              {d.points_.map((p, i) => (
+                <div className="row" key={p.id}>
+                  <span className="badge">{i + 1}</span>
+                  <input type="text" style={{ flex: 1, width: 'auto' }} placeholder="Etiqueta correcta" value={p.label} onChange={(e) => set({ points_: d.points_.map((x) => (x.id === p.id ? { ...x, label: e.target.value } : x)) })} />
+                  <button className="secondary" onClick={() => set({ points_: d.points_.filter((x) => x.id !== p.id) })}>✕</button>
+                </div>
+              ))}
+            </>
+          )}
+          <label><input type="checkbox" checked={d.predefined} onChange={(e) => set({ predefined: e.target.checked })} /> Etiquetes predefinides (l'alumne tria d'una llista)</label>
+          {d.predefined && <label>Etiquetes extra (distractors, una per línia)<textarea value={d.extraLabels} onChange={(e) => set({ extraLabels: e.target.value })} /></label>}
+        </div>
+      )}
+
+      {d.type === 'SHORT_TEXT' && (
+        <div className="stack">
+          <label>Respostes acceptades (una per línia; ignora majúscules i accents)<textarea value={d.accepted} onChange={(e) => set({ accepted: e.target.value })} /></label>
+          <label>Expressió regular (opcional)<input type="text" value={d.regex} onChange={(e) => set({ regex: e.target.value })} /></label>
+        </div>
+      )}
+
+      {d.type === 'LONG_TEXT' && (
+        <label>Resposta de referència (per al corrector)<textarea value={d.reference} onChange={(e) => set({ reference: e.target.value })} /></label>
+      )}
+      {(d.type === 'LONG_TEXT' || d.type === 'IMAGE_UPLOAD') && <p className="muted">Aquesta pregunta es corregeix manualment.</p>}
+
+      {err && <p className="error">{err}</p>}
+      <div className="row">
+        <button onClick={save} disabled={busy}>Desa</button>
+        <button className="secondary" onClick={onCancel}>Cancel·la</button>
+      </div>
+    </div>
+  );
+}
