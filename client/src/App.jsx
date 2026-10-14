@@ -9,6 +9,8 @@ import TeacherHome from './pages/TeacherHome.jsx';
 import QuizEditor from './pages/QuizEditor.jsx';
 import Attempts from './pages/Attempts.jsx';
 import AttemptReview from './pages/AttemptReview.jsx';
+import PortableFormatDocs from './pages/PortableFormatDocs.jsx';
+import QuizPreview from './pages/QuizPreview.jsx';
 import ArchitectureArt from './components/ArchitectureArt.jsx';
 
 function Login() {
@@ -35,6 +37,7 @@ function Login() {
           <a className="button button-primary login-submit" href={`/auth/google?next=${encodeURIComponent(next)}`}>
             Entra amb Google <span aria-hidden="true">↗</span>
           </a>
+          {import.meta.env.DEV && <a className="login-note" href="/auth/dev?n=1">Dev: entra com a alumne de prova</a>}
           <p className="login-note">Només comptes @inspalamos.cat</p>
         </div>
         <span className="login-version">SMXFORM / 01</span>
@@ -65,7 +68,7 @@ function Layout({ user, children }) {
         <div className="account-nav"><span className="account-email">{user.email}</span><button className="logout-button" onClick={logout}>Surt <span aria-hidden="true">↗</span></button></div>
       </header>
       <main className="app-main">{children}</main>
-      <footer className="app-footer"><span>SMXFORM <span className="footer-divider">/</span> SMX </span><span>INSTITUT PALAMÓS<span className="footer-coordinate">· 41.85° N</span></span></footer>
+      <footer className="app-footer"><span>Desenvolupat per @aniollidon </span><span>INSTITUT PALAMÓS<span className="footer-coordinate">· 41.85° N</span></span></footer>
     </div>
   );
 }
@@ -90,12 +93,14 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/format" element={<PortableFormatDocs />} />
       <Route path="/" element={<Home />} />
       <Route path="/s" element={<Protected><StudentHome /></Protected>} />
       <Route path="/q/:slug" element={<Protected><QuizLanding /></Protected>} />
       <Route path="/attempt/:id" element={<Protected><TakeQuiz /></Protected>} />
       <Route path="/t" element={<Protected teacher><TeacherHome /></Protected>} />
       <Route path="/t/quiz/:id" element={<Protected teacher><QuizEditor /></Protected>} />
+      <Route path="/t/quiz/:id/preview" element={<Protected teacher><QuizPreview /></Protected>} />
       <Route path="/t/quiz/:id/attempts" element={<Protected teacher><Attempts /></Protected>} />
       <Route path="/t/attempt/:id" element={<Protected teacher><AttemptReview /></Protected>} />
       <Route path="*" element={<Navigate to="/" replace />} />

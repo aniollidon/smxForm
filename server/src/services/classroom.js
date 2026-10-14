@@ -145,7 +145,7 @@ async function exportGrades(quizId, { returnToStudents = false } = {}) {
           requestBody: {},
         });
       }
-      await prisma.attempt.update({ where: { id: a.id }, data: { exportedAt: new Date() } });
+      await prisma.attempt.update({ where: { id: a.id }, data: { exportedAt: new Date(), exportedScore: a.score } });
       results.push({ email: a.user.email, score: a.score, ok: true });
     } catch (e) {
       results.push({ email: a.user.email, score: a.score, ok: false, error: e.message });

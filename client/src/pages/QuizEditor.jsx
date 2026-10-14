@@ -2,8 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
+import { fileUrl } from '../api';
 import QuestionEditor from '../components/QuestionEditor.jsx';
 import { TYPE_LABELS, emptyDraft, fromQuestion } from '../questionModel';
+import { blobToDataUri, exportQuiz } from '../portableQuiz.js';
 
 const toLocal = (iso) => (iso ? new Date(new Date(iso) - new Date(iso).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '');
 
@@ -58,14 +60,12 @@ function Settings({ quiz, onSaved }) {
           <select value={f.showResults} onChange={(e) => set({ showResults: e.target.value })}>
             <option value="NONE">Res</option>
             <option value="SCORE">Només la nota</option>
-            <option value="FULL">Nota i respostes correctes</option>
           </select>
         </label>
         <label>A partir de (opcional) <input type="datetime-local" value={f.showResultsFrom} onChange={(e) => set({ showResultsFrom: e.target.value })} /></label>
       </div>
       {check('published', 'Publicada (l\'enllaç funciona)')}
       <div className="row"><button onClick={save}>Desa</button><span className="muted">{msg}</span></div>
-      <div className="muted">Enllaç: <code>{`${location.origin}/q/${quiz.publicSlug}`}</code></div>
     </div>
   );
 }
@@ -110,7 +110,11 @@ function ClassroomPanel({ quiz, onSaved }) {
           {quiz.classroomCourseWorkId && (
             <div className="row">
               <label><input type="checkbox" checked={ret} onChange={(e) => setRet(e.target.checked)} /> Retorna les tasques als alumnes</label>
-              <button onClick={() => run(async () => setResults(await api(`/api/teacher/quizzes/${quiz.id}/export`, { method: 'POST', body: { returnToStudents: ret } })))}>Exporta notes</button>
+              <button disabled={quiz.gradingStatus?.needsRegrade > 0 || quiz.gradingStatus?.pendingReview > 0} onClick={() => run(async () => setResults(await api(`/api/teacher/quizzes/${quiz.id}/export`, { method: 'POST', body: { returnToStudents: ret } })))}>
+                {quiz.gradingStatus?.classroomUpdates > 0 ? 'Actualitza notes a Classroom' : 'Exporta notes'}
+              </button>
+              {quiz.gradingStatus?.needsRegrade > 0 && <span className="muted">Reavalua els intents abans d’exportar les notes.</span>}
+              {quiz.gradingStatus?.pendingReview > 0 && <span className="muted">Revisa les respostes manuals abans d’actualitzar les notes.</span>}
             </div>
           )}
         </>
@@ -132,6 +136,10 @@ export default function QuizEditor() {
   const qc = useQueryClient();
   const { data: quiz, isLoading, error } = useQuery({ queryKey: ['quiz-edit', id], queryFn: () => api(`/api/teacher/quizzes/${id}`) });
   const [editing, setEditing] = useState(null); // draft o null
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
+  const [gradeAction, setGradeAction] = useState('');
+  const [gradeMessage, setGradeMessage] = useState('');
   const refresh = () => qc.invalidateQueries({ queryKey: ['quiz-edit', id] });
   if (isLoading) return <p>Carregant…</p>;
   if (error) return <p className="error">{error.message}</p>;
@@ -153,9 +161,82 @@ export default function QuizEditor() {
     refresh();
   };
 
+  const downloadExport = async () => {
+    setExporting(true);
+    setExportError('');
+    try {
+      const images = {};
+      for (const name of new Set(quiz.questions.map((question) => question.imageUrl).filter(Boolean))) {
+        const response = await fetch(fileUrl(name), { credentials: 'same-origin' });
+        if (!response.ok) throw new Error(`No s’ha pogut descarregar la imatge ${name}.`);
+        images[name] = await blobToDataUri(await response.blob());
+      }
+      const blob = new Blob([JSON.stringify(exportQuiz(quiz, images), null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `${quiz.title.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'entrega'}.smxform.json`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setExportError(error.message);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const regrade = async () => {
+    setGradeAction('regrade');
+    setGradeMessage('');
+    try {
+      const result = await api(`/api/teacher/quizzes/${id}/regrade`, { method: 'POST' });
+      setGradeMessage(`${result.regraded} intents reavaluats; ${result.pendingReview} pendents de revisió manual.`);
+      refresh();
+    } catch (error) {
+      setGradeMessage(error.message);
+    } finally {
+      setGradeAction('');
+    }
+  };
+
+  const updateClassroom = async () => {
+    setGradeAction('classroom');
+    setGradeMessage('');
+    try {
+      const result = await api(`/api/teacher/quizzes/${id}/export`, { method: 'POST', body: { returnToStudents: false } });
+      const succeeded = result.filter((row) => row.ok).length;
+      const failed = result.filter((row) => !row.ok).length;
+      setGradeMessage(`${succeeded} notes actualitzades a Classroom${failed ? `; ${failed} errors` : ''}.`);
+      refresh();
+    } catch (error) {
+      setGradeMessage(error.message);
+    } finally {
+      setGradeAction('');
+    }
+  };
+
   return (
     <div>
       <p><Link to="/t">← Entregues</Link> · <Link to={`/t/quiz/${id}/attempts`}>Veure intents</Link></p>
+      <p><Link className="button button-primary" to={`/t/quiz/${id}/preview`}>Visualitza el formulari ↗</Link></p>
+      <div className="row export-tools">
+        <button className="secondary" onClick={downloadExport} disabled={exporting}>{exporting ? 'Preparant…' : 'Exporta JSON'}</button>
+        <Link to="/format">Especificació del format</Link>
+        {exportError && <span className="error">{exportError}</span>}
+      </div>
+      {(quiz.gradingStatus?.needsRegrade > 0 || quiz.gradingStatus?.pendingReview > 0 || quiz.gradingStatus?.classroomUpdates > 0) && (
+        <div className="grade-warning-panel">
+          <strong>Cal actualitzar les qualificacions</strong>
+          {quiz.gradingStatus.needsRegrade > 0 && <p>{quiz.gradingStatus.needsRegrade} intents s’han avaluat amb una versió anterior de les preguntes. La reavaluació pot deixar les respostes llargues pendents de revisió manual.</p>}
+          {quiz.gradingStatus.pendingReview > 0 && <p>{quiz.gradingStatus.pendingReview} intents tenen respostes manuals pendents de corregir; no s’actualitzaran les notes de Classroom fins que es revisin.</p>}
+          {quiz.gradingStatus.classroomUpdates > 0 && <p>Les notes ja exportades han canviat per a {quiz.gradingStatus.classroomUpdates} alumnes; actualitza-les també a Classroom.</p>}
+          <div className="row">
+            {quiz.gradingStatus.needsRegrade > 0 && <button disabled={!!gradeAction} onClick={regrade}>{gradeAction === 'regrade' ? 'Reavaluant…' : 'Reavalua intents'}</button>}
+            {quiz.gradingStatus.classroomUpdates > 0 && quiz.classroomCourseWorkId && <button className="secondary" disabled={!!gradeAction || quiz.gradingStatus.needsRegrade > 0 || quiz.gradingStatus.pendingReview > 0} onClick={updateClassroom}>{gradeAction === 'classroom' ? 'Actualitzant…' : 'Actualitza Classroom'}</button>}
+            {gradeMessage && <span className="muted">{gradeMessage}</span>}
+          </div>
+        </div>
+      )}
       <Settings quiz={quiz} onSaved={refresh} />
       <ClassroomPanel quiz={quiz} onSaved={refresh} />
       <h3>Preguntes</h3>

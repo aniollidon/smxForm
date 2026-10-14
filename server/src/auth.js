@@ -59,6 +59,25 @@ router.get(
   }
 );
 
+// Només desenvolupament: entra com a alumne de prova sense Google (DEV_LOGIN=1, mai en producció)
+const devLogin = process.env.DEV_LOGIN === '1' && process.env.NODE_ENV !== 'production';
+if (devLogin) {
+  router.get('/dev', async (req, res, next) => {
+    try {
+      const n = String(req.query.n || '1').replace(/[^a-z0-9]/gi, '').slice(0, 20) || '1';
+      const email = `prova.${n}@${domain()}`.toLowerCase();
+      const user = await prisma.user.upsert({
+        where: { email },
+        update: { role: 'STUDENT' },
+        create: { email, name: `Alumne prova ${n}`, role: 'STUDENT' },
+      });
+      req.login(user, (err) => (err ? next(err) : res.redirect(safeNext(req.query.next || '/s'))));
+    } catch (e) {
+      next(e);
+    }
+  });
+}
+
 router.post('/logout', (req, res) => {
   req.session = null;
   res.json({ ok: true });

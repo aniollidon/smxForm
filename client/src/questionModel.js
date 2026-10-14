@@ -14,7 +14,7 @@ export const TYPE_LABELS = {
 const lines = (s) => s.split('\n').map((x) => x.trim()).filter(Boolean);
 
 export function emptyDraft(type) {
-  const base = { type, text: '', imageUrl: null, points: 1, required: false, shuffleOptions: false };
+  const base = { type, text: '', imageUrl: null, points: 1, required: true, shuffleOptions: ['MCQ', 'MATCHING', 'IMAGE_LABEL'].includes(type) };
   switch (type) {
     case 'MCQ':
       return { ...base, multiple: false, opts: [{ id: uid(), text: '', correct: true }, { id: uid(), text: '', correct: false }] };

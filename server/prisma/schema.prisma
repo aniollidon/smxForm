@@ -34,8 +34,9 @@ model Quiz {
   gradeToExport         String     @default("BEST") // BEST | LAST
   showResults           String     @default("SCORE") // NONE | SCORE | FULL
   showResultsFrom       DateTime? // si està definit, els resultats només es veuen a partir d'aquesta data
-  published             Boolean    @default(false)
+  published             Boolean    @default(true)
   publicSlug            String     @unique
+  gradingVersion        Int        @default(0)
   questions             Question[]
   attempts              Attempt[]
   createdAt             DateTime   @default(now())
@@ -49,9 +50,10 @@ model Question {
   text           String
   imageUrl       String?
   points         Float    @default(1)
-  required       Boolean  @default(false)
-  shuffleOptions Boolean  @default(false)
+  required       Boolean  @default(true)
+  shuffleOptions Boolean  @default(true)
   order          Int      @default(0)
+  gradingVersion Int     @default(0)
   config         String   @default("{}") // JSON visible a l'alumne
   answerKey      String   @default("{}") // JSON només professor
   answers        Answer[]
@@ -69,6 +71,8 @@ model Attempt {
   score       Float?
   status      String    @default("IN_PROGRESS") // IN_PROGRESS | SUBMITTED | NEEDS_REVIEW | GRADED
   exportedAt  DateTime?
+  exportedScore Float?
+  gradedVersion Int       @default(0)
   answers     Answer[]
 }
 
@@ -83,6 +87,7 @@ model Answer {
   score       Float?
   needsReview Boolean  @default(false)
   feedback    String?
+  questionGradingVersion Int @default(0)
 
   @@unique([attemptId, questionId])
 }

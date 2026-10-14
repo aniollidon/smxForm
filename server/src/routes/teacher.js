@@ -4,6 +4,7 @@ const { z } = require('zod');
 const prisma = require('../db');
 const classroom = require('../services/classroom');
 const { computeAttemptScore } = require('../grading');
+const { regradeAttempt, getGradingStatus } = require('../grading/regrade');
 const { requireTeacher } = require('../auth');
 
 const router = express.Router();
@@ -43,8 +44,8 @@ const questionSchema = z.object({
   text: z.string().min(1).max(5000),
   imageUrl: z.string().regex(/^q_[a-f0-9]{32}\.(png|jpg|webp|gif)$/).nullable().optional(),
   points: z.number().min(0).max(1000).default(1),
-  required: z.boolean().default(false),
-  shuffleOptions: z.boolean().default(false),
+  required: z.boolean().default(true),
+  shuffleOptions: z.boolean().default(true),
   config: z.any().default({}),
   answerKey: z.any().default({}),
 });
@@ -76,7 +77,7 @@ const quizSchema = z.object({
   gradeToExport: z.enum(['BEST', 'LAST']).default('BEST'),
   showResults: z.enum(['NONE', 'SCORE', 'FULL']).default('SCORE'),
   showResultsFrom: z.string().datetime().nullable().optional(),
-  published: z.boolean().default(false),
+  published: z.boolean().default(true),
 });
 
 const present = (q) => ({ ...q, config: JSON.parse(q.config), answerKey: JSON.parse(q.answerKey) });
@@ -85,6 +86,14 @@ async function ownQuiz(req, include) {
   const quiz = await prisma.quiz.findUnique({ where: { id: Number(req.params.id) }, include });
   if (!quiz || quiz.teacherId !== req.user.id) throw fail(404, 'Quiz no trobat');
   return quiz;
+}
+
+async function gradingStatusFor(quiz) {
+  const attempts = await prisma.attempt.findMany({
+    where: { quizId: quiz.id, status: { not: 'IN_PROGRESS' } },
+    select: { userId: true, status: true, score: true, submittedAt: true, gradedVersion: true, exportedAt: true, exportedScore: true },
+  });
+  return getGradingStatus(quiz, attempts);
 }
 
 router.get('/me', (req, res) => {
@@ -97,7 +106,14 @@ router.get('/quizzes', wrap(async (req, res) => {
     orderBy: { createdAt: 'desc' },
     include: { _count: { select: { questions: true, attempts: true } } },
   });
-  res.json(quizzes);
+  const attempts = quizzes.length ? await prisma.attempt.findMany({
+    where: { quizId: { in: quizzes.map((quiz) => quiz.id) }, status: { not: 'IN_PROGRESS' } },
+    select: { quizId: true, userId: true, status: true, score: true, submittedAt: true, gradedVersion: true, exportedAt: true, exportedScore: true },
+  }) : [];
+  const attemptsByQuiz = new Map(quizzes.map((quiz) => [quiz.id, []]));
+  for (const attempt of attempts) attemptsByQuiz.get(attempt.quizId).push(attempt);
+  const enriched = quizzes.map((quiz) => ({ ...quiz, gradingStatus: getGradingStatus(quiz, attemptsByQuiz.get(quiz.id)) }));
+  res.json(enriched);
 }));
 
 router.post('/quizzes', wrap(async (req, res) => {
@@ -113,17 +129,38 @@ router.post('/quizzes', wrap(async (req, res) => {
   res.status(201).json(quiz);
 }));
 
-router.get('/quizzes/:id', wrap(async (req, res) => {
-  const quiz = await ownQuiz(req, { questions: { orderBy: { order: 'asc' } } });
+router.get('/quizzes/by-slug/:slug', wrap(async (req, res) => {
+  const quiz = await prisma.quiz.findFirst({
+    where: { publicSlug: req.params.slug, teacherId: req.user.id },
+    include: { questions: { orderBy: { order: 'asc' } } },
+  });
+  if (!quiz) throw fail(404, 'Quiz no trobat');
   res.json({ ...quiz, questions: quiz.questions.map(present) });
 }));
 
+router.get('/quizzes/:id', wrap(async (req, res) => {
+  const quiz = await ownQuiz(req, {
+    questions: { orderBy: { order: 'asc' } },
+    attempts: {
+      where: { status: { not: 'IN_PROGRESS' } },
+      select: { userId: true, status: true, score: true, submittedAt: true, gradedVersion: true, exportedAt: true, exportedScore: true },
+    },
+  });
+  const { attempts, ...data } = quiz;
+  res.json({ ...data, questions: quiz.questions.map(present), gradingStatus: getGradingStatus(quiz, attempts) });
+}));
+
 router.put('/quizzes/:id', wrap(async (req, res) => {
-  await ownQuiz(req);
+  const current = await ownQuiz(req);
   const data = quizSchema.parse(req.body);
+  const scoringChanged = current.maxScore !== data.maxScore || current.negativePenalty !== data.negativePenalty;
   const quiz = await prisma.quiz.update({
     where: { id: Number(req.params.id) },
-    data: { ...data, showResultsFrom: data.showResultsFrom ? new Date(data.showResultsFrom) : null },
+    data: {
+      ...data,
+      showResultsFrom: data.showResultsFrom ? new Date(data.showResultsFrom) : null,
+      ...(scoringChanged ? { gradingVersion: { increment: 1 } } : {}),
+    },
   });
   res.json(quiz);
 }));
@@ -155,7 +192,10 @@ router.post('/quizzes/:id/questions', wrap(async (req, res) => {
   const quiz = await ownQuiz(req);
   const data = parseQuestion(req.body);
   const last = await prisma.question.aggregate({ where: { quizId: quiz.id }, _max: { order: true } });
-  const q = await prisma.question.create({ data: { ...data, quizId: quiz.id, order: (last._max.order ?? -1) + 1 } });
+  const [q] = await prisma.$transaction([
+    prisma.question.create({ data: { ...data, quizId: quiz.id, order: (last._max.order ?? -1) + 1 } }),
+    prisma.quiz.update({ where: { id: quiz.id }, data: { gradingVersion: { increment: 1 } } }),
+  ]);
   res.status(201).json(present(q));
 }));
 
@@ -166,14 +206,20 @@ async function ownQuestion(req) {
 }
 
 router.put('/questions/:qid', wrap(async (req, res) => {
-  await ownQuestion(req);
-  const q = await prisma.question.update({ where: { id: Number(req.params.qid) }, data: parseQuestion(req.body) });
+  const current = await ownQuestion(req);
+  const [q] = await prisma.$transaction([
+    prisma.question.update({ where: { id: Number(req.params.qid) }, data: { ...parseQuestion(req.body), gradingVersion: { increment: 1 } } }),
+    prisma.quiz.update({ where: { id: current.quizId }, data: { gradingVersion: { increment: 1 } } }),
+  ]);
   res.json(present(q));
 }));
 
 router.delete('/questions/:qid', wrap(async (req, res) => {
-  await ownQuestion(req);
-  await prisma.question.delete({ where: { id: Number(req.params.qid) } });
+  const question = await ownQuestion(req);
+  await prisma.$transaction([
+    prisma.question.delete({ where: { id: Number(req.params.qid) } }),
+    prisma.quiz.update({ where: { id: question.quizId }, data: { gradingVersion: { increment: 1 } } }),
+  ]);
   res.json({ ok: true });
 }));
 
@@ -197,15 +243,48 @@ router.get('/quizzes/:id/attempts', wrap(async (req, res) => {
   res.json(attempts);
 }));
 
+router.post('/quizzes/:id/regrade', wrap(async (req, res) => {
+  const quiz = await ownQuiz(req, { questions: true });
+  const attempts = await prisma.attempt.findMany({
+    where: { quizId: quiz.id, status: { not: 'IN_PROGRESS' }, gradedVersion: { lt: quiz.gradingVersion } },
+    include: { answers: true },
+  });
+  let pendingReview = 0;
+  for (const attempt of attempts) {
+    const result = regradeAttempt(quiz, quiz.questions, attempt.answers);
+    await prisma.$transaction(async (tx) => {
+      for (const update of result.answerUpdates) {
+        await tx.answer.update({ where: { id: update.id }, data: update.data });
+      }
+      await tx.attempt.update({
+        where: { id: attempt.id },
+        data: { score: result.score, status: result.status, gradedVersion: result.gradedVersion },
+      });
+    });
+    if (result.status === 'NEEDS_REVIEW') pendingReview++;
+  }
+  res.json({ regraded: attempts.length, pendingReview });
+}));
+
 router.get('/attempts/:aid', wrap(async (req, res) => {
   const a = await prisma.attempt.findUnique({
     where: { id: Number(req.params.aid) },
     include: { quiz: true, user: { select: { email: true, name: true } }, answers: { include: { question: true } } },
   });
   if (!a || a.quiz.teacherId !== req.user.id) throw fail(404, 'Intent no trobat');
+  const pendingReviews = await prisma.answer.groupBy({
+    by: ['questionId'],
+    where: {
+      question: { quizId: a.quizId },
+      attempt: { status: { not: 'IN_PROGRESS' } },
+      needsReview: true,
+    },
+    _count: { _all: true },
+  });
   res.json({
     ...a,
     answers: a.answers.map((x) => ({ ...x, value: JSON.parse(x.value), question: present(x.question) })),
+    manualReviewCounts: Object.fromEntries(pendingReviews.map((item) => [item.questionId, item._count._all])),
   });
 }));
 
@@ -219,22 +298,53 @@ router.put('/answers/:id/review', wrap(async (req, res) => {
   if (body.score < 0 || body.score > ans.question.points) throw fail(400, 'Puntuació fora de rang');
   await prisma.answer.update({
     where: { id: ans.id },
-    data: { score: body.score, feedback: body.feedback ?? null, needsReview: false },
+    data: { score: body.score, feedback: body.feedback ?? null, needsReview: false, questionGradingVersion: ans.question.gradingVersion },
   });
   const attempt = await recomputeAttempt(ans.attemptId);
   res.json(attempt);
 }));
 
-async function recomputeAttempt(attemptId) {
-  const attempt = await prisma.attempt.findUnique({
+router.put('/questions/:qid/review-all', wrap(async (req, res) => {
+  const question = await ownQuestion(req);
+  if (!['LONG_TEXT', 'IMAGE_UPLOAD'].includes(question.type)) throw fail(400, 'Aquesta pregunta no admet correcció manual');
+  const body = z.object({ score: z.number(), feedback: z.string().max(2000).optional() }).parse(req.body);
+  if (body.score < 0 || body.score > question.points) throw fail(400, 'Puntuació fora de rang');
+  const answers = await prisma.answer.findMany({
+    where: { questionId: question.id, needsReview: true, attempt: { status: { not: 'IN_PROGRESS' } } },
+    select: { id: true, attemptId: true },
+  });
+  const attemptIds = [...new Set(answers.map((answer) => answer.attemptId))];
+  await prisma.$transaction(async (tx) => {
+    for (const answer of answers) {
+      await tx.answer.update({
+        where: { id: answer.id },
+        data: {
+          score: body.score,
+          feedback: body.feedback ?? null,
+          needsReview: false,
+          questionGradingVersion: question.gradingVersion,
+        },
+      });
+    }
+    for (const attemptId of attemptIds) await recomputeAttempt(attemptId, tx);
+  });
+  res.json({ reviewed: answers.length, attempts: attemptIds.length });
+}));
+
+async function recomputeAttempt(attemptId, db = prisma) {
+  const attempt = await db.attempt.findUnique({
     where: { id: attemptId },
     include: { quiz: { include: { questions: true } }, answers: true },
   });
   const map = new Map(attempt.answers.map((a) => [a.questionId, a]));
   const { score, pending } = computeAttemptScore(attempt.quiz, attempt.quiz.questions, map);
-  return prisma.attempt.update({
+  return db.attempt.update({
     where: { id: attemptId },
-    data: { score: pending ? null : score, status: pending ? 'NEEDS_REVIEW' : 'GRADED', exportedAt: null },
+    data: {
+      score: pending ? null : score,
+      status: pending ? 'NEEDS_REVIEW' : 'GRADED',
+      gradedVersion: attempt.gradedVersion,
+    },
   });
 }
 
@@ -260,6 +370,9 @@ router.post('/quizzes/:id/classroom', wrap(async (req, res) => {
 
 router.post('/quizzes/:id/export', wrap(async (req, res) => {
   const quiz = await ownQuiz(req);
+  const status = await gradingStatusFor(quiz);
+  if (status.needsRegrade > 0) throw fail(409, 'Reavalua els intents abans d’exportar les notes a Classroom');
+  if (status.pendingReview > 0) throw fail(409, 'Revisa les respostes manuals abans d’actualitzar les notes a Classroom');
   const { returnToStudents } = z.object({ returnToStudents: z.boolean().optional() }).parse(req.body || {});
   res.json(await classroom.exportGrades(quiz.id, { returnToStudents }));
 }));
