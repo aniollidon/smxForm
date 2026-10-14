@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
+import WorkspaceHero from '../components/WorkspaceHero.jsx';
 
 export default function TeacherHome() {
   const qc = useQueryClient();
@@ -18,13 +19,17 @@ export default function TeacherHome() {
 
   return (
     <div>
-      <div className="card row">
+      <WorkspaceHero eyebrow="ESPAI PROFESSORAT" title="Les teves entregues" description="Dissenya, publica i revisa activitats." />
+      <div className="card row create-panel">
+        <div className="create-panel-label"><span className="eyebrow">NOVA ACTIVITAT</span><span>Comença una entrega</span></div>
         <input type="text" style={{ flex: 1, width: 'auto' }} placeholder="Títol de la nova entrega" value={title} onChange={(e) => setTitle(e.target.value)} />
-        <button disabled={!title.trim() || create.isPending} onClick={() => create.mutate()}>Crea entrega</button>
+        <button disabled={!title.trim() || create.isPending} onClick={() => create.mutate()}>Crea entrega <span aria-hidden="true">↗</span></button>
       </div>
+      <div className="panel-heading list-heading"><div><span className="eyebrow">BIBLIOTECA</span><h2>Activitats creades</h2></div><span className="panel-index">02 / GESTIÓ</span></div>
       {isLoading && <p>Carregant…</p>}
+      {!isLoading && !data?.length && <div className="card empty-state">Encara no has creat cap entrega.</div>}
       {data?.map((q) => (
-        <div className="card row between" key={q.id}>
+        <div className="card row between quiz-row" key={q.id}>
           <div>
             <Link to={`/t/quiz/${q.id}`}><b>{q.title}</b></Link>{' '}
             <span className="badge">{q.published ? 'Publicada' : 'Esborrany'}</span>

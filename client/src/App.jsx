@@ -9,43 +9,64 @@ import TeacherHome from './pages/TeacherHome.jsx';
 import QuizEditor from './pages/QuizEditor.jsx';
 import Attempts from './pages/Attempts.jsx';
 import AttemptReview from './pages/AttemptReview.jsx';
+import ArchitectureArt from './components/ArchitectureArt.jsx';
 
 function Login() {
   const next = new URLSearchParams(useLocation().search).get('next') || '/';
   const error = new URLSearchParams(useLocation().search).get('error');
   return (
-    <main>
-      <div className="card stack">
-        <h1>smxForm</h1>
-        {error && <p className="error">Cal un compte @inspalamos.cat.</p>}
-        <a href={`/auth/google?next=${encodeURIComponent(next)}`}>
-          <button>Entra amb Google (@inspalamos.cat)</button>
-        </a>
-      </div>
+    <main className="login-page">
+      <section className="login-visual">
+        <div className="login-brand"><span className="brand-mark"><i /><i /><i /><i /></span> smxForm <span className="login-edition">INSTITUT DE PALAMÓS</span></div>
+        <div className="login-copy">
+          <span className="eyebrow">ESPAI DIGITAL · INSPALAMOS</span>
+          <h1>Aprendre.<br /><span>Crear. Avançar.</span></h1>
+          <p>Un espai comú per a cada pregunta i cada idea.</p>
+        </div>
+        <ArchitectureArt />
+        <span className="login-coordinate">41.85° N &nbsp; 3.12° E</span>
+      </section>
+      <section className="login-panel">
+        <div className="login-panel-inner">
+          <span className="eyebrow">ACCÉS SEGUR</span>
+          <h2>Benvingut/da</h2>
+          <p className="muted">Entra amb el teu compte del centre per continuar.</p>
+          {error && <p className="error">Cal un compte @inspalamos.cat.</p>}
+          <a className="button button-primary login-submit" href={`/auth/google?next=${encodeURIComponent(next)}`}>
+            Entra amb Google <span aria-hidden="true">↗</span>
+          </a>
+          <p className="login-note">Només comptes @inspalamos.cat</p>
+        </div>
+        <span className="login-version">SMXFORM / 01</span>
+      </section>
     </main>
   );
 }
 
 function Layout({ user, children }) {
   const qc = useQueryClient();
+  const location = useLocation();
   const logout = async () => {
     await api('/auth/logout', { method: 'POST' });
     qc.clear();
     window.location.href = '/login';
   };
   return (
-    <>
-      <header className="top">
-        <nav>
-          <Link to="/s">Zona alumne</Link>
-          {user.role === 'TEACHER' && <Link to="/t">Zona professor</Link>}
+    <div className="app-shell">
+      <div className="announcement-bar"><span>SMXFORM</span><span>ENTORN D'APRENENTATGE DIGITAL</span><span className="announcement-status"><i /> OPERATIU</span></div>
+      <header className="top app-header">
+        <Link className="brand-lockup" to={user.role === 'TEACHER' ? '/t' : '/s'} aria-label="smxForm, inici">
+          <span className="brand-mark"><i /><i /><i /><i /></span><span>smx<span>Form</span></span>
+        </Link>
+        <nav className="app-nav" aria-label="Navegació principal">
+          <Link to="/s" className={location.pathname.startsWith('/s') || location.pathname.startsWith('/q') || location.pathname.startsWith('/attempt') ? 'active' : ''}>Alumne</Link>
+          {user.role === 'TEACHER' && <Link to="/t" className={location.pathname.startsWith('/t') ? 'active' : ''}>Professorat</Link>}
         </nav>
-        <span>
-          {user.email} <button className="secondary" onClick={logout}>Surt</button>
-        </span>
+        <div className="account-nav"><span className="account-email">{user.email}</span><button className="logout-button" onClick={logout}>Surt <span aria-hidden="true">↗</span></button></div>
       </header>
-      <main>{children}</main>
-    </>
+      <main className="app-main">{children}</main>
+      <footer className="app-footer"><span>SMXFORM <span className="footer-divider">/</span> SMX </span><span>INSTITUT PALAMÓS<span className="footer-coordinate">· 41.85° N</span></span></footer>
+    </div>
   );
 }
 

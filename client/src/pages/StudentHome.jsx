@@ -2,16 +2,18 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api';
+import WorkspaceHero from '../components/WorkspaceHero.jsx';
 
 export default function StudentHome() {
   const { data, isLoading } = useQuery({ queryKey: ['my-attempts'], queryFn: () => api('/api/student/attempts') });
   if (isLoading) return <p>Carregant…</p>;
   return (
-    <div className="card">
-      <h2>Les meves entregues</h2>
-      <p className="muted">Per fer una entrega nova, obre l'enllaç que t'ha donat el professor (o la tasca al Classroom).</p>
-      {!data.length && <p>Encara no n'has fet cap.</p>}
-      <table>
+    <div>
+      <WorkspaceHero eyebrow="ESPAI ALUMNE" title="Les meves entregues" description="Les teves activitats, en un sol lloc." />
+      <section className="card data-panel">
+        <div className="panel-heading"><div><span className="eyebrow">ACTIVITAT RECENT</span><h2>Historial d'entregues</h2></div><span className="panel-index">01 / ALUMNE</span></div>
+        <p className="muted">Per fer una entrega nova, obre l'enllaç que t'ha donat el professor (o la tasca al Classroom).</p>
+      {!data.length ? <p className="empty-state">Encara no n'has fet cap.</p> : <table>
         <thead><tr><th>Entrega</th><th>Estat</th><th>Nota</th><th /></tr></thead>
         <tbody>
           {data.map((a) => (
@@ -23,7 +25,8 @@ export default function StudentHome() {
             </tr>
           ))}
         </tbody>
-      </table>
+      </table>}
+      </section>
     </div>
   );
 }

@@ -38,7 +38,7 @@ export default function QuestionEditor({ initial, onSave, onCancel }) {
   };
 
   return (
-    <div className="card stack" style={{ border: '2px solid #2563eb' }}>
+    <div className="card stack question-editor-card">
       <b>{TYPE_LABELS[d.type]}</b>
       <label>Enunciat<textarea value={d.text} onChange={(e) => set({ text: e.target.value })} /></label>
       <div className="row">
