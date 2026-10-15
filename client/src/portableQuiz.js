@@ -69,6 +69,8 @@ export function exportQuestion(question, image = null) {
       return { ...common, accepted: answer.accepted || [], ...(answer.regex ? { regex: answer.regex } : {}) };
     case 'LONG_TEXT':
       return { ...common, reference: answer.reference || '' };
+    case 'CALCULATED':
+      return { ...common, variables: config.variables, formula: answer.formula, tolerance: answer.tolerance ?? 0, toleranceType: answer.toleranceType || 'nominal' };
     case 'IMAGE_UPLOAD':
       return common;
     default:
@@ -164,6 +166,13 @@ export function importQuestionToDraft(question) {
         try { new RegExp(question.regex); } catch { throw new Error('SHORT_TEXT: «regex» no és una expressió regular vàlida.'); }
       }
       draft = { ...base, accepted: (question.accepted || []).join('\n'), regex: question.regex || '' };
+      break;
+    case 'CALCULATED':
+      requireValue(Array.isArray(question.variables) && question.variables.length >= 1 && question.variables.length <= 20, 'CALCULATED: «variables» ha de tenir entre 1 i 20 variables.');
+      requireValue(question.variables.every((v) => typeof v.name === 'string' && Number.isFinite(v.min) && Number.isFinite(v.max) && Number.isInteger(v.decimals ?? 0)), 'CALCULATED: cada variable necessita «name», «min» i «max» numèrics i «decimals» enter.');
+      requireValue(typeof question.formula === 'string' && question.formula.trim() && question.formula.length <= 500, 'CALCULATED: «formula» ha de ser text de fins a 500 caràcters.');
+      requireValue(Number.isFinite(question.tolerance ?? 0) && (question.tolerance ?? 0) >= 0 && ['nominal', 'relative'].includes(question.toleranceType ?? 'nominal'), 'CALCULATED: «tolerance» ha de ser ≥ 0 i «toleranceType» «nominal» o «relative».');
+      draft = { ...base, vars: question.variables.map((v) => ({ name: v.name, min: v.min, max: v.max, decimals: v.decimals ?? 0 })), formula: question.formula, tolerance: question.tolerance ?? 0, toleranceType: question.toleranceType ?? 'nominal' };
       break;
     case 'LONG_TEXT':
       requireValue(question.reference == null || typeof question.reference === 'string', 'LONG_TEXT: «reference» ha de ser text.');

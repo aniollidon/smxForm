@@ -5,6 +5,7 @@ const prisma = require('../db');
 const classroom = require('../services/classroom');
 const { scoreQuestion, computeAttemptScore, shuffle, isAnswered } = require('../grading');
 const { requireAuth } = require('../auth');
+const { instantiate, personalize } = require('../grading/calculated');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -35,6 +36,10 @@ function studentQuestion(q, seed) {
     if (config.labels) config.labels = shuffle(config.labels, s);
   }
   const { answerKey, ...rest } = q;
+  if (q.type === 'CALCULATED') {
+    const { text } = instantiate({ ...q, answerKey: JSON.parse(answerKey) }, seed);
+    return { ...rest, text, config: { allowClipboard: !!config.allowClipboard } };
+  }
   return { ...rest, config };
 }
 
@@ -55,14 +60,15 @@ function attemptResult(attempt, quiz, questions, answers) {
     const byQ = new Map(answers.map((a) => [a.questionId, a]));
     base.questions = questions.map((q) => {
       const a = byQ.get(q.id);
+      const pq = personalize({ ...q, config: JSON.parse(q.config), answerKey: JSON.parse(q.answerKey) }, attempt.seed);
       return {
         id: q.id,
-        text: q.text,
+        text: pq.text,
         type: q.type,
         points: q.points,
         imageUrl: q.imageUrl,
-        config: JSON.parse(q.config),
-        answerKey: JSON.parse(q.answerKey),
+        config: pq.config,
+        answerKey: pq.answerKey,
         value: a ? JSON.parse(a.value) : null,
         fileUrl: a?.fileUrl ?? null,
         score: a?.score ?? null,
@@ -186,7 +192,7 @@ router.post('/attempts/:aid/submit', wrap(async (req, res) => {
   for (const q of a.quiz.questions) {
     const x = byQ.get(q.id);
     const value = x ? JSON.parse(x.value) : null;
-    const r = scoreQuestion({ ...q, answerKey: JSON.parse(q.answerKey) }, q.type === 'IMAGE_UPLOAD' ? !!x?.fileUrl : value, a.quiz.negativePenalty);
+    const r = scoreQuestion({ ...q, answerKey: JSON.parse(q.answerKey), seed: a.seed }, q.type === 'IMAGE_UPLOAD' ? !!x?.fileUrl : value, a.quiz.negativePenalty);
     const data = { score: r.manual ? null : r.score, needsReview: !!(r.manual && r.answered), questionGradingVersion: q.gradingVersion };
     if (r.manual && !r.answered) data.score = 0;
     const saved = await prisma.answer.upsert({

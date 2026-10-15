@@ -4,7 +4,7 @@ function parseJson(value) {
   return typeof value === 'string' ? JSON.parse(value) : value;
 }
 
-function regradeAttempt(quiz, questions, answers) {
+function regradeAttempt(quiz, questions, answers, seed = 0) {
   const answerByQuestion = new Map(answers.map((answer) => [answer.questionId, answer]));
   const updates = [];
   const recalculatedAnswers = new Map();
@@ -15,7 +15,7 @@ function regradeAttempt(quiz, questions, answers) {
     const value = parseJson(existing.value);
     const answerKey = parseJson(question.answerKey);
     const gradingValue = question.type === 'IMAGE_UPLOAD' ? !!existing.fileUrl : value;
-    const result = scoreQuestion({ ...question, answerKey }, gradingValue, quiz.negativePenalty);
+    const result = scoreQuestion({ ...question, answerKey, seed }, gradingValue, quiz.negativePenalty);
     const reviewedShortTextUnchanged = question.type === 'SHORT_TEXT'
       && existing.manuallyReviewed
       && existing.questionGradingVersion === question.gradingVersion;

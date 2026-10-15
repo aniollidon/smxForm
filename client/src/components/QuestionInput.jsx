@@ -140,6 +140,13 @@ export default function QuestionInput({ q, value, onChange, attemptId, fileName,
           {pasteWarning('answer')}
         </div>
       );
+    case 'CALCULATED':
+      return (
+        <div className="question-input-field">
+          <input type="text" inputMode="decimal" maxLength={50} disabled={disabled} value={value ?? ''} onPaste={onPaste('answer')} onBeforeInput={onBeforeInput('answer')} onChange={onTextChange('answer', value, onChange)} />
+          {pasteWarning('answer')}
+        </div>
+      );
     case 'LONG_TEXT':
       return (
         <div className="question-input-field">

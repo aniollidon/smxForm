@@ -2,13 +2,14 @@ let n = 0;
 export const uid = () => `i${Date.now().toString(36)}${n++}`;
 
 export const TYPE_LABELS = {
-  MCQ: 'Test (A/B/C…)',
-  TRUE_FALSE: 'Cert / Fals',
-  MATCHING: 'Relacionar conceptes',
-  ORDERING: 'Ordenar una llista',
+  MCQ: 'Test',
+  TRUE_FALSE: 'Cert/Fals',
+  MATCHING: 'Relacionar',
+  ORDERING: 'Ordenar',
   IMAGE_LABEL: 'Etiquetar imatge',
-  SHORT_TEXT: 'Resposta breu',
-  LONG_TEXT: 'Resposta llarga',
+  SHORT_TEXT: 'Text breu',
+  CALCULATED: 'Fórmula',
+  LONG_TEXT: 'Text llarg',
   IMAGE_UPLOAD: 'Pujar imatge',
 };
 
@@ -29,6 +30,8 @@ export function emptyDraft(type) {
       return { ...base, points_: [], predefined: false, extraLabels: '' };
     case 'SHORT_TEXT':
       return { ...base, accepted: '', regex: '' };
+    case 'CALCULATED':
+      return { ...base, vars: [{ name: 'a', min: 1, max: 10, decimals: 0 }], formula: '', tolerance: 0, toleranceType: 'nominal' };
     case 'LONG_TEXT':
       return { ...base, reference: '' };
     default:
@@ -70,6 +73,8 @@ export function fromQuestion(q) {
       return { ...base, accepted: (k.accepted || []).join('\n'), regex: k.regex || '' };
     case 'LONG_TEXT':
       return { ...base, reference: k.reference || '' };
+    case 'CALCULATED':
+      return { ...base, vars: c.variables.map((v) => ({ ...v })), formula: k.formula || '', tolerance: k.tolerance ?? 0, toleranceType: k.toleranceType || 'nominal' };
     default:
       return base;
   }
@@ -111,6 +116,10 @@ export function toPayload(d) {
     case 'LONG_TEXT':
       p.answerKey = { reference: d.reference };
       break;
+    case 'CALCULATED':
+      p.config = { variables: d.vars.map((v) => ({ name: v.name.trim(), min: Number(v.min), max: Number(v.max), decimals: Number(v.decimals) })) };
+      p.answerKey = { formula: d.formula.trim(), tolerance: Number(d.tolerance) || 0, toleranceType: d.toleranceType };
+      break;
   }
   p.config.allowClipboard = !!d.allowClipboard;
   return p;
@@ -138,6 +147,21 @@ export function validateDraft(d) {
     case 'SHORT_TEXT':
       if (!lines(d.accepted).length && !d.regex) return 'Indica almenys una resposta acceptada';
       break;
+    case 'CALCULATED': {
+      if (!d.vars.length) return 'Defineix almenys una variable';
+      const names = new Set();
+      for (const v of d.vars) {
+        if (!/^[A-Za-z][A-Za-z0-9_]{0,19}$/.test(v.name.trim())) return `Nom de variable invàlid: «${v.name}»`;
+        if (names.has(v.name.trim())) return `Variable repetida: «${v.name}»`;
+        names.add(v.name.trim());
+        if (![v.min, v.max].every((n) => v.min !== '' && v.max !== '' && Number.isFinite(Number(n)))) return `Rang invàlid a {${v.name}}`;
+        if (Number(v.min) > Number(v.max)) return `A {${v.name}} el mínim supera el màxim`;
+        if (!Number.isInteger(Number(v.decimals)) || v.decimals < 0 || v.decimals > 10) return `Decimals invàlids a {${v.name}}`;
+      }
+      if (!d.formula.trim()) return 'Indica la fórmula de la resposta';
+      if (!(Number(d.tolerance) >= 0)) return 'Tolerància invàlida';
+      break;
+    }
   }
   return null;
 }

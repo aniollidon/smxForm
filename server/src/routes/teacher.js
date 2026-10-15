@@ -6,6 +6,7 @@ const classroom = require('../services/classroom');
 const { computeAttemptScore } = require('../grading');
 const { regradeAttempt, getGradingStatus } = require('../grading/regrade');
 const { evaluateAnswers } = require('../services/llm');
+const { validateDefinition, personalize } = require('../grading/calculated');
 const { requireTeacher } = require('../auth');
 
 const router = express.Router();
@@ -14,7 +15,7 @@ router.use(requireTeacher);
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 const fail = (status, msg) => Object.assign(new Error(msg), { status });
 
-const TYPES = ['MCQ', 'TRUE_FALSE', 'MATCHING', 'ORDERING', 'IMAGE_LABEL', 'SHORT_TEXT', 'LONG_TEXT', 'IMAGE_UPLOAD'];
+const TYPES = ['MCQ', 'TRUE_FALSE', 'MATCHING', 'ORDERING', 'IMAGE_LABEL', 'SHORT_TEXT', 'LONG_TEXT', 'IMAGE_UPLOAD', 'CALCULATED'];
 const id = z.union([z.string(), z.number()]).transform(String);
 const item = z.object({ id, text: z.string().max(500) });
 const clipboardConfig = { allowClipboard: z.boolean().default(false) };
@@ -30,6 +31,15 @@ const configSchemas = {
     ...clipboardConfig,
   }),
   SHORT_TEXT: z.object(clipboardConfig).passthrough(),
+  CALCULATED: z.object({
+    variables: z.array(z.object({
+      name: z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,19}$/),
+      min: z.number().finite(),
+      max: z.number().finite(),
+      decimals: z.number().int().min(0).max(10).default(0),
+    })).min(1).max(20),
+    ...clipboardConfig,
+  }),
   LONG_TEXT: z.object(clipboardConfig).passthrough(),
   IMAGE_UPLOAD: z.object(clipboardConfig).passthrough(),
 };
@@ -40,6 +50,11 @@ const keySchemas = {
   ORDERING: z.object({ order: z.array(id).min(2).max(30), allOrNothing: z.boolean().default(false) }),
   IMAGE_LABEL: z.object({ labels: z.record(z.string()) }),
   SHORT_TEXT: z.object({ accepted: z.array(z.string()).default([]), regex: z.string().max(200).optional() }),
+  CALCULATED: z.object({
+    formula: z.string().trim().min(1).max(500),
+    tolerance: z.number().min(0).max(1e9).default(0),
+    toleranceType: z.enum(['nominal', 'relative']).default('nominal'),
+  }),
   LONG_TEXT: z.object({ reference: z.string().optional() }).passthrough(),
   IMAGE_UPLOAD: z.object({}).passthrough(),
 };
@@ -68,6 +83,10 @@ function parseQuestion(body) {
     const ids = new Set(q.config.items.map((entry) => entry.id));
     if (ids.size !== q.config.items.length || q.answerKey.order.length !== ids.size || !q.answerKey.order.every((entryId) => ids.has(entryId)) || new Set(q.answerKey.order).size !== ids.size) throw fail(400, 'Ordre invàlid');
   }
+  if (q.type === 'CALCULATED') {
+    const error = validateDefinition(q.text, q.config, q.answerKey);
+    if (error) throw fail(400, error);
+  }
   if (q.type === 'MCQ') {
     const o = new Set(q.config.options.map((x) => x.id));
     if (!q.answerKey.correct.every((c) => o.has(c))) throw fail(400, 'Resposta correcta invàlida');
@@ -90,6 +109,13 @@ const quizSchema = z.object({
 });
 
 const present = (q) => ({ ...q, config: JSON.parse(q.config), answerKey: JSON.parse(q.answerKey) });
+
+// Amb ?seed=N, les preguntes calculades es mostren amb els valors d'aquesta llavor (previsualització).
+const presentPreview = (q, req) => {
+  const p = present(q);
+  const seed = Number(req.query.seed);
+  return Number.isInteger(seed) ? personalize(p, seed) : p;
+};
 
 async function ownQuiz(req, include) {
   const quiz = await prisma.quiz.findUnique({ where: { id: Number(req.params.id) }, include });
@@ -144,7 +170,7 @@ router.get('/quizzes/by-slug/:slug', wrap(async (req, res) => {
     include: { questions: { orderBy: { order: 'asc' } } },
   });
   if (!quiz) throw fail(404, 'Quiz no trobat');
-  res.json({ ...quiz, questions: quiz.questions.map(present) });
+  res.json({ ...quiz, questions: quiz.questions.map((q) => presentPreview(q, req)) });
 }));
 
 router.get('/quizzes/:id', wrap(async (req, res) => {
@@ -157,7 +183,7 @@ router.get('/quizzes/:id', wrap(async (req, res) => {
     },
   });
   const { attempts, ...data } = quiz;
-  res.json({ ...data, questions: quiz.questions.map(present), gradingStatus: getGradingStatus(quiz, attempts) });
+  res.json({ ...data, questions: quiz.questions.map((q) => presentPreview(q, req)), gradingStatus: getGradingStatus(quiz, attempts) });
 }));
 
 router.put('/quizzes/:id', wrap(async (req, res) => {
@@ -261,7 +287,7 @@ router.post('/quizzes/:id/regrade', wrap(async (req, res) => {
   });
   let pendingReview = 0;
   for (const attempt of attempts) {
-    const result = regradeAttempt(quiz, quiz.questions, attempt.answers);
+    const result = regradeAttempt(quiz, quiz.questions, attempt.answers, attempt.seed);
     await prisma.$transaction(async (tx) => {
       for (const update of result.answerUpdates) {
         await tx.answer.update({ where: { id: update.id }, data: update.data });
@@ -284,7 +310,7 @@ router.get('/attempts/:aid', wrap(async (req, res) => {
   if (!a || a.quiz.teacherId !== req.user.id) throw fail(404, 'Intent no trobat');
   res.json({
     ...a,
-    answers: a.answers.map((x) => ({ ...x, value: JSON.parse(x.value), question: present(x.question) })),
+    answers: a.answers.map((x) => ({ ...x, value: JSON.parse(x.value), question: personalize(present(x.question), a.seed) })),
   });
 }));
 

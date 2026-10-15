@@ -149,6 +149,38 @@ export default function QuestionEditor({ initial, onSave, onCancel }) {
         </div>
       )}
 
+      {d.type === 'CALCULATED' && (
+        <div className="stack">
+          <p className="muted">Usa variables a l’enunciat amb claus, p. ex. {'{a}'}; cada alumne en rep un valor aleatori dins del rang. També pots escriure càlculs a l’enunciat amb {'{=2*{a}}'}.</p>
+          {d.vars.map((v, i) => {
+            const setVar = (patch) => set({ vars: d.vars.map((x, j) => (j === i ? { ...x, ...patch } : x)) });
+            return (
+              <div className="row" key={i}>
+                <label>Variable {'{ }'} <input type="text" style={{ width: 90 }} value={v.name} onChange={(e) => setVar({ name: e.target.value })} /></label>
+                <label>Mínim <input type="number" step="any" style={{ width: 100 }} value={v.min} onChange={(e) => setVar({ min: e.target.value })} /></label>
+                <label>Màxim <input type="number" step="any" style={{ width: 100 }} value={v.max} onChange={(e) => setVar({ max: e.target.value })} /></label>
+                <label>Decimals <input type="number" min="0" max="10" style={{ width: 70 }} value={v.decimals} onChange={(e) => setVar({ decimals: e.target.value })} /></label>
+                {d.vars.length > 1 && <button className="secondary" onClick={() => set({ vars: d.vars.filter((_, j) => j !== i) })}>✕</button>}
+              </div>
+            );
+          })}
+          {d.vars.length < 20 && <button className="secondary" onClick={() => set({ vars: [...d.vars, { name: '', min: 1, max: 10, decimals: 0 }] })}>+ Variable</button>}
+          <label>Fórmula de la resposta correcta (p. ex. {'{a}*{b}/2'}; admet + - * / % ** i funcions com sqrt, pow, abs, round, sin, cos, log, pi)
+            <input type="text" maxLength={500} value={d.formula} onChange={(e) => set({ formula: e.target.value })} />
+          </label>
+          <div className="row">
+            <label>Tolerància <input type="number" min="0" step="any" value={d.tolerance} onChange={(e) => set({ tolerance: e.target.value })} /></label>
+            <label>Tipus de tolerància
+              <select value={d.toleranceType} onChange={(e) => set({ toleranceType: e.target.value })}>
+                <option value="nominal">Nominal (± valor)</option>
+                <option value="relative">Relativa (fracció de la resposta; 0.01 = 1%)</option>
+              </select>
+            </label>
+          </div>
+          <p className="muted">S’autoavalua; l’alumne pot escriure la resposta amb punt o coma decimal.</p>
+        </div>
+      )}
+
       {d.type === 'LONG_TEXT' && (
         <label>Resposta de referència (per al corrector)<textarea value={d.reference} onChange={(e) => set({ reference: e.target.value })} /></label>
       )}

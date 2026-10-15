@@ -23,6 +23,7 @@ function Value({ a }) {
           <ul>{q.config.points.map((p, i) => <li key={p.id}>{i + 1}: {value[p.id] || '—'} <span className="muted">(correcte: {q.answerKey.labels[p.id]})</span></li>)}</ul>
         </div>
       );
+    case 'CALCULATED': return <p>{String(value)} <span className="muted">(correcte: {q.answerKey.expected})</span></p>;
     default: return <p style={{ whiteSpace: 'pre-wrap' }}>{String(value)}</p>;
   }
 }

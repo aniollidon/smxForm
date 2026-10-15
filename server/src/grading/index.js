@@ -1,3 +1,6 @@
+const { rng } = require('./rng');
+const { gradeCalculated } = require('./calculated');
+
 const MANUAL_TYPES = ['LONG_TEXT', 'IMAGE_UPLOAD'];
 
 const norm = (s) =>
@@ -20,6 +23,7 @@ function isAnswered(type, value) {
     case 'IMAGE_LABEL':
       return typeof value === 'object' && Object.values(value).some((v) => v !== '' && v != null);
     case 'SHORT_TEXT':
+    case 'CALCULATED':
     case 'LONG_TEXT':
       return String(value).trim() !== '';
     case 'IMAGE_UPLOAD':
@@ -96,6 +100,9 @@ function gradeQuestion(question, value) {
       fraction = hit ? 1 : 0;
       break;
     }
+    case 'CALCULATED':
+      fraction = gradeCalculated(question, value) ? 1 : 0;
+      break;
   }
   return { answered: true, fraction };
 }
@@ -126,18 +133,6 @@ function computeAttemptScore(quiz, questions, answersByQ) {
   }
   const raw = max > 0 ? (Math.max(0, total) / max) * quiz.maxScore : 0;
   return { score: Math.min(quiz.maxScore, Math.round(raw * 100) / 100), pending };
-}
-
-// PRNG determinista per aleatoritzar per intent
-function rng(seed) {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
 }
 
 function shuffle(arr, seed) {

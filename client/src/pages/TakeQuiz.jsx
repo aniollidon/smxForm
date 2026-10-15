@@ -118,6 +118,14 @@ function QuestionResult({ q }) {
         </div>
       );
       break;
+    case 'CALCULATED':
+      answers = (
+        <div className="answer-columns">
+          <AnswerBlock label="La teva resposta" tone={scoreTone === 'correct' ? 'correct' : scoreTone === 'pending' ? '' : 'incorrect'}>{value}</AnswerBlock>
+          <AnswerBlock label="Resposta correcta" tone="correct">{key.expected}</AnswerBlock>
+        </div>
+      );
+      break;
     case 'LONG_TEXT':
       answers = (
         <div className="answer-columns">
