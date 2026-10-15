@@ -81,6 +81,12 @@ export default function QuestionReview() {
           <span className="eyebrow">PREGUNTA {String(data.question.order + 1).padStart(2, '0')} · {data.question.type}</span>
           <h1>{data.question.text}</h1>
           <p>{formatGrade(data.question.points)} punts · Respostes de tots els intents enviats</p>
+          {data.question.answerKey?.reference && (
+            <div className="review-reference question-review-reference">
+              <span>REFERÈNCIA DE SOLUCIÓ</span>
+              {data.question.answerKey.reference}
+            </div>
+          )}
         </div>
         <div className="question-review-count"><span>PENDENTS</span><b>{pending}</b></div>
       </header>
