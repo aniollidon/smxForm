@@ -2,6 +2,7 @@ import React from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api';
+import { formatGrade } from '../formatGrade.js';
 
 const label = { NEEDS_REVIEW: 'Pendent de correcció', GRADED: 'Corregida', SUBMITTED: 'Enviada' };
 
@@ -21,7 +22,7 @@ export default function Attempts() {
               <td>{a.user.name || a.user.email}</td>
               <td>{new Date(a.submittedAt).toLocaleString()}</td>
               <td>{label[a.status]}</td>
-              <td>{a.score ?? '—'}</td>
+              <td>{formatGrade(a.score)}</td>
               <td>{a.exportedAt ? '✓' : ''}</td>
               <td><Link to={`/t/attempt/${a.id}`}>Revisa</Link></td>
             </tr>

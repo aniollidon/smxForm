@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, fileUrl } from '../api';
+import { formatGrade } from '../formatGrade.js';
 
 function AnswerReviewForm({ answer, question, onDone }) {
   const [score, setScore] = useState(answer.score ?? 0);
@@ -79,7 +80,7 @@ export default function QuestionReview() {
         <div className="question-review-title">
           <span className="eyebrow">PREGUNTA {String(data.question.order + 1).padStart(2, '0')} · {data.question.type}</span>
           <h1>{data.question.text}</h1>
-          <p>{data.question.points} punts · Respostes de tots els intents enviats</p>
+          <p>{formatGrade(data.question.points)} punts · Respostes de tots els intents enviats</p>
         </div>
         <div className="question-review-count"><span>PENDENTS</span><b>{pending}</b></div>
       </header>

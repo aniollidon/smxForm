@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api';
 import WorkspaceHero from '../components/WorkspaceHero.jsx';
+import { formatGrade } from '../formatGrade.js';
 
 export default function StudentHome() {
   const { data, isLoading } = useQuery({ queryKey: ['my-attempts'], queryFn: () => api('/api/student/attempts') });
@@ -20,7 +21,7 @@ export default function StudentHome() {
             <tr key={a.id}>
               <td>{a.quizTitle}</td>
               <td>{a.status === 'IN_PROGRESS' ? 'En curs' : a.status === 'NEEDS_REVIEW' ? 'Pendent de correcció' : 'Corregida'}</td>
-              <td>{a.score != null ? `${a.score} / ${a.maxScore}` : '—'}</td>
+              <td>{a.score != null ? `${formatGrade(a.score)} / ${formatGrade(a.maxScore)}` : '—'}</td>
               <td><Link to={a.status === 'IN_PROGRESS' ? `/attempt/${a.id}` : `/q/${a.slug}`}>Obre</Link></td>
             </tr>
           ))}

@@ -6,6 +6,7 @@ import { upload } from '../api';
 import { dataUriToFile, parsePortableQuiz } from '../portableQuiz.js';
 import { toPayload } from '../questionModel.js';
 import WorkspaceHero from '../components/WorkspaceHero.jsx';
+import FormatMenu from '../components/FormatMenu.jsx';
 
 export default function TeacherHome() {
   const qc = useQueryClient();
@@ -97,7 +98,7 @@ export default function TeacherHome() {
       <div className="row import-tools">
         <button className="secondary" disabled={importBusy} onClick={() => importInput.current?.click()}>{importBusy ? 'Important…' : 'Importa JSON'}</button>
         <input ref={importInput} className="visually-hidden" type="file" accept=".json,application/json" tabIndex={-1} aria-label="Fitxer JSON d’una entrega" onChange={(event) => event.target.files[0] && importQuiz(event.target.files[0])} />
-        <Link to="/format">Especificació del format</Link>
+        <FormatMenu />
         {importMessage && <span className="error">{importMessage}</span>}
       </div>
       <div className="panel-heading list-heading"><div><span className="eyebrow">BIBLIOTECA</span><h2>Activitats creades</h2></div><span className="panel-index">02 / GESTIÓ</span></div>

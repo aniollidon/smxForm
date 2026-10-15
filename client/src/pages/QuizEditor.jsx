@@ -4,8 +4,10 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import { fileUrl } from '../api';
 import QuestionEditor from '../components/QuestionEditor.jsx';
+import FormatMenu from '../components/FormatMenu.jsx';
 import { TYPE_LABELS, emptyDraft, fromQuestion } from '../questionModel';
 import { blobToDataUri, exportQuiz } from '../portableQuiz.js';
+import { formatGrade } from '../formatGrade.js';
 
 const toLocal = (iso) => (iso ? new Date(new Date(iso) - new Date(iso).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '');
 
@@ -139,7 +141,7 @@ function ClassroomPanel({ quiz, onSaved }) {
       {results && (
         <table>
           <tbody>
-            {results.map((r) => <tr key={r.email}><td>{r.email}</td><td>{r.score}</td><td className={r.ok ? 'ok' : 'error'}>{r.ok ? 'OK' : r.error}</td></tr>)}
+            {results.map((r) => <tr key={r.email}><td>{r.email}</td><td>{formatGrade(r.score)}</td><td className={r.ok ? 'ok' : 'error'}>{r.ok ? 'OK' : r.error}</td></tr>)}
           </tbody>
         </table>
       )}
@@ -232,14 +234,25 @@ export default function QuizEditor() {
   };
 
   return (
-    <div>
-      <p><Link to="/t">← Entregues</Link> · <Link to={`/t/quiz/${id}/attempts`}>Veure intents</Link></p>
-      <p><Link className="button button-primary" to={`/t/quiz/${id}/preview`}>Visualitza el formulari ↗</Link></p>
-      <div className="row export-tools">
-        <button className="secondary" onClick={downloadExport} disabled={exporting}>{exporting ? 'Preparant…' : 'Exporta JSON'}</button>
-        <Link to="/format">Especificació del format</Link>
-        {exportError && <span className="error">{exportError}</span>}
-      </div>
+    <div className="quiz-editor">
+      <header className="quiz-editor-header">
+        <p className="quiz-editor-breadcrumb"><Link to="/t">← Entregues</Link><span>/</span>Editor</p>
+        <div className="quiz-editor-title-row">
+          <div>
+            <span className="eyebrow">EDICIÓ D’ACTIVITAT</span>
+            <h1>{quiz.title}</h1>
+            <p className="quiz-editor-meta">{quiz.questions.length} preguntes · Nota màxima {formatGrade(quiz.maxScore)}</p>
+          </div>
+          <span className={`badge ${quiz.published ? 'quiz-status-published' : ''}`}>{quiz.published ? 'Publicada' : 'Esborrany'}</span>
+        </div>
+        <div className="row quiz-editor-actions">
+          <Link className="button button-primary" to={`/t/quiz/${id}/preview`}>Visualitza el formulari ↗</Link>
+          <Link className="button secondary" to={`/t/quiz/${id}/attempts`}>Veure intents</Link>
+          <button className="secondary" onClick={downloadExport} disabled={exporting}>{exporting ? 'Preparant…' : 'Exporta JSON'}</button>
+          <FormatMenu />
+          {exportError && <span className="error">{exportError}</span>}
+        </div>
+      </header>
       {(quiz.gradingStatus?.needsRegrade > 0 || quiz.gradingStatus?.pendingReview > 0 || quiz.gradingStatus?.classroomUpdates > 0) && (
         <div className="grade-warning-panel">
           <strong>Cal actualitzar les qualificacions</strong>
@@ -253,18 +266,26 @@ export default function QuizEditor() {
           </div>
         </div>
       )}
-      <Settings quiz={quiz} onSaved={refresh} />
-      <ClassroomPanel quiz={quiz} onSaved={refresh} />
-      <h3>Preguntes</h3>
+      <section className="quiz-editor-section">
+        <div className="panel-heading">
+          <div><span className="eyebrow">01 / PARAMETRES</span><h2>Detalls i avaluació</h2></div>
+        </div>
+        <Settings quiz={quiz} onSaved={refresh} />
+      </section>
+      <section className="quiz-editor-section">
+        <div className="panel-heading">
+          <div><span className="eyebrow">02 / CONTINGUT</span><h2>Preguntes</h2></div>
+          <span className="panel-index">{quiz.questions.length} {quiz.questions.length === 1 ? 'PREGUNTA' : 'PREGUNTES'}</span>
+        </div>
       {quiz.questions.map((q, i) =>
         editing?.id === q.id ? (
           <QuestionEditor key={q.id} initial={editing} onSave={save} onCancel={() => setEditing(null)} />
         ) : (
-          <div className="card row between" key={q.id}>
-            <div>
-              <span className="badge">{TYPE_LABELS[q.type]}</span> {i + 1}. {q.text.slice(0, 100)} <span className="muted">({q.points} pt{q.required ? ', obligatòria' : ''})</span>
+          <div className="card row between quiz-question-row" key={q.id}>
+            <div className="quiz-question-summary">
+              <span className="badge">{TYPE_LABELS[q.type]}</span> {i + 1}. {q.text.slice(0, 100)} <span className="muted">({formatGrade(q.points)} pt{q.required ? ', obligatòria' : ''})</span>
             </div>
-            <div className="row">
+            <div className="row quiz-question-actions">
               {['LONG_TEXT', 'IMAGE_UPLOAD'].includes(q.type) && <Link className="question-answer-shortcut" to={`/t/quiz/${id}/question/${q.id}/answers`}>Veure respostes ↗</Link>}
               <button className="secondary" disabled={i === 0} onClick={() => move(i, -1)}>↑</button>
               <button className="secondary" disabled={i === quiz.questions.length - 1} onClick={() => move(i, 1)}>↓</button>
@@ -276,11 +297,30 @@ export default function QuizEditor() {
       )}
       {editing && !editing.id && <QuestionEditor initial={editing} onSave={save} onCancel={() => setEditing(null)} />}
       {!editing && (
-        <div className="card row">
-          <span>Afegeix:</span>
+        <div className="card quiz-add-question">
+          <strong>Afegeix una pregunta</strong>
+          <div className="row">
           {Object.entries(TYPE_LABELS).map(([t, l]) => <button key={t} className="secondary" onClick={() => setEditing(emptyDraft(t))}>{l}</button>)}
+          </div>
         </div>
       )}
+      </section>
+      <section className="quiz-editor-section">
+        <div className="panel-heading">
+          <div><span className="eyebrow">03 / DISTRIBUCIÓ</span><h2>Publicació i Classroom</h2></div>
+        </div>
+        <div className="card stack">
+          <h3>Formulari públic</h3>
+          {quiz.published ? (
+            <a href={`${window.location.origin}/q/${quiz.publicSlug}`} target="_blank" rel="noreferrer">
+              {`${window.location.origin}/q/${quiz.publicSlug}`}
+            </a>
+          ) : (
+            <p className="muted">Publica l’entrega a la configuració perquè l’enllaç públic funcioni.</p>
+          )}
+        </div>
+        <ClassroomPanel quiz={quiz} onSaved={refresh} />
+      </section>
     </div>
   );
 }

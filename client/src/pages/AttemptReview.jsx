@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, fileUrl } from '../api';
 import { ImageWithPoints } from '../components/QuestionInput.jsx';
+import { formatGrade } from '../formatGrade.js';
 
 const optText = (q, list, id) => q.config[list].find((x) => x.id === id)?.text ?? id;
 
@@ -73,7 +74,7 @@ export default function AttemptReview() {
         </div>
         <div className="review-metrics">
           <div className="review-metric"><span>ESTAT</span><b>{status}</b></div>
-          <div className="review-metric review-total-score"><span>NOTA</span><b>{data.score ?? '—'} <i>/ {data.quiz.maxScore}</i></b></div>
+          <div className="review-metric review-total-score"><span>NOTA</span><b>{formatGrade(data.score)} <i>/ {formatGrade(data.quiz.maxScore)}</i></b></div>
           <div className="review-metric"><span>PREGUNTES</span><b>{answers.length}</b></div>
         </div>
         {pendingCount > 0 && <p className="review-pending-note">{pendingCount} respostes manuals pendents en aquest intent</p>}
@@ -86,7 +87,7 @@ export default function AttemptReview() {
         <article className="card review-question" key={a.id}>
           <div className="review-question-heading">
             <div className="review-question-title"><span className="review-question-number">{String(index + 1).padStart(2, '0')}</span><h3>{a.question.text}</h3></div>
-            <span className={`review-score${a.needsReview ? ' is-pending' : ''}`}>{a.score ?? 'Pendent'} <i>/ {a.question.points}</i></span>
+            <span className={`review-score${a.needsReview ? ' is-pending' : ''}`}>{a.score == null ? 'Pendent' : formatGrade(a.score)} <i>/ {formatGrade(a.question.points)}</i></span>
           </div>
           <div className="review-answer"><Value a={a} /></div>
           {manual(a) && a.question.answerKey.reference && <p className="review-reference"><span>REFERÈNCIA</span>{a.question.answerKey.reference}</p>}

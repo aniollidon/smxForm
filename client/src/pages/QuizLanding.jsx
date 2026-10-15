@@ -3,6 +3,7 @@ import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { api } from '../api';
 import QuizPreview from './QuizPreview.jsx';
+import { formatGrade } from '../formatGrade.js';
 
 export default function QuizLanding() {
   const { slug } = useParams();
@@ -30,7 +31,7 @@ export default function QuizLanding() {
       {data.attempts.filter((a) => a.status !== 'IN_PROGRESS').map((a) => (
         <div key={a.id}>
           <Link to={`/attempt/${a.id}`}>Intent del {new Date(a.submittedAt).toLocaleString()}</Link>
-          {a.score != null && <> — nota {a.score}</>}
+          {a.score != null && <> — nota {formatGrade(a.score)}</>}
           {a.status === 'NEEDS_REVIEW' && <> — pendent de correcció</>}
         </div>
       ))}

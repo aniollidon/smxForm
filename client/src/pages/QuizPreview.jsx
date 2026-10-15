@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api, fileUrl } from '../api';
 import QuestionInput from '../components/QuestionInput.jsx';
+import { formatGrade } from '../formatGrade.js';
 
 export default function QuizPreview() {
   const { id, slug } = useParams();
@@ -26,10 +27,12 @@ export default function QuizPreview() {
           <div>
             <b>{index + 1}. {question.text}</b>{' '}
             {question.required && <span className="error">*</span>}{' '}
-            <span className="muted">({question.points} pt)</span>
+                <span className="muted">({formatGrade(question.points)} pt)</span>
           </div>
           {question.type !== 'IMAGE_LABEL' && question.imageUrl && <img className="preview-question-image" src={fileUrl(question.imageUrl)} alt="" />}
-          <QuestionInput q={question} value={question.type === 'MCQ' ? [] : undefined} disabled />
+          <div className="question-response">
+            <QuestionInput q={question} value={question.type === 'MCQ' ? [] : undefined} disabled />
+          </div>
         </div>
       ))}
       <div className="row preview-submit"><button disabled>Envia l’entrega</button></div>

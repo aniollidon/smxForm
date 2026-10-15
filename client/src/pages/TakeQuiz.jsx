@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, fileUrl } from '../api';
 import QuestionInput, { ImageWithPoints } from '../components/QuestionInput.jsx';
+import { formatGrade } from '../formatGrade.js';
 
 function AnswerBlock({ label, children, tone }) {
   return (
@@ -137,7 +138,7 @@ function QuestionResult({ q }) {
     <div className="card stack result-question">
       <div className="row between result-heading">
         <b>{q.text}</b>
-        <span className={`result-score result-${scoreTone}`}>{q.score ?? '—'} / {q.points} · {status}</span>
+        <span className={`result-score result-${scoreTone}`}>{formatGrade(q.score)} / {formatGrade(q.points)} · {status}</span>
       </div>
       {answers}
       {q.feedback && <div className="result-feedback"><strong>Comentari del professorat</strong><p>{q.feedback}</p></div>}
@@ -150,7 +151,7 @@ function Result({ result }) {
   return (
     <div className="stack">
       <p>
-        {result.status === 'NEEDS_REVIEW' ? 'Pendent de correcció manual per part del professor.' : <>Nota: <b>{result.score} / {result.maxScore}</b></>}
+        {result.status === 'NEEDS_REVIEW' ? 'Pendent de correcció manual per part del professor.' : <>Nota: <b>{formatGrade(result.score)} / {formatGrade(result.maxScore)}</b></>}
       </p>
       {result.questions?.map((q) => <QuestionResult q={q} key={q.id} />)}
     </div>
@@ -190,6 +191,7 @@ export default function TakeQuiz() {
   const change = (qid, value) => {
     setAnswers((a) => ({ ...a, [qid]: { ...a[qid], value } }));
     latest.current[qid] = value;
+    setSaveState('Desant…');
     clearTimeout(timers.current[qid]);
     timers.current[qid] = setTimeout(() => save(qid).catch(() => {}), 600);
   };
@@ -219,26 +221,38 @@ export default function TakeQuiz() {
     );
   }
   return (
-    <div>
-      <h2>{data.title}</h2>
+    <div className="take-quiz">
+      <header className="take-quiz-header">
+        <h2>{data.title}</h2>
+        <p className={`take-quiz-save-state${saveState.startsWith('Error') ? ' is-error' : ''}`} aria-live="polite">
+          {saveState || 'Les respostes es desen automàticament.'}
+        </p>
+      </header>
       {data.questions.map((q, i) => (
         <div className="card stack" key={q.id} style={missing.includes(q.id) ? { outline: '2px solid #dc2626' } : undefined}>
-          <div><b>{i + 1}. {q.text}</b> {q.required && <span className="error">*</span>} <span className="muted">({q.points} pt)</span></div>
+          <div><b>{i + 1}. {q.text}</b> {q.required && <span className="error">*</span>} <span className="muted">({formatGrade(q.points)} pt)</span></div>
           {q.type !== 'IMAGE_LABEL' && q.imageUrl && <img src={`/api/files/${q.imageUrl}`} alt="" style={{ maxWidth: '100%' }} />}
-          <QuestionInput
-            q={q}
-            attemptId={data.id}
-            value={answers[q.id]?.value}
-            fileName={answers[q.id]?.fileUrl}
-            onChange={(v) => change(q.id, v)}
-            onFile={(f) => setAnswers((a) => ({ ...a, [q.id]: { value: 'file', fileUrl: f } }))}
-          />
+          <div className="question-response">
+            <QuestionInput
+              q={q}
+              attemptId={data.id}
+              value={answers[q.id]?.value}
+              fileName={answers[q.id]?.fileUrl}
+              onChange={(v) => change(q.id, v)}
+              onFile={(f) => setAnswers((a) => ({ ...a, [q.id]: { value: 'file', fileUrl: f } }))}
+            />
+          </div>
         </div>
       ))}
-      <div className="row">
-        <button onClick={submit}>Envia l'entrega</button>
-        <span className="muted">{saveState}</span>
-        {msg && <span className="error">{msg}</span>}
+      <div className="take-quiz-finish">
+        <div className="take-quiz-finish-copy">
+          <h3>Finalitza l'entrega</h3>
+          <p className="muted">Quan l'enviïs, ja no podràs modificar les respostes.</p>
+        </div>
+        <div className="take-quiz-finish-actions">
+          {msg && <p className="error" role="alert">{msg}</p>}
+          <button onClick={submit}>Envia l'entrega</button>
+        </div>
       </div>
     </div>
   );

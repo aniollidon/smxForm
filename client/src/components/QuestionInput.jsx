@@ -22,9 +22,9 @@ export default function QuestionInput({ q, value, onChange, attemptId, fileName,
         onChange(sel.includes(id) ? sel.filter((x) => x !== id) : [...sel, id]);
       };
       return (
-        <div>
+        <div className="choice-list">
           {c.options.map((o) => (
-            <label key={o.id}>
+            <label className="choice-option" key={o.id}>
               <input type={c.multiple ? 'checkbox' : 'radio'} name={`q${q.id}`} disabled={disabled} checked={sel.includes(o.id)} onChange={() => toggle(o.id)} /> {o.text}
             </label>
           ))}
@@ -34,9 +34,9 @@ export default function QuestionInput({ q, value, onChange, attemptId, fileName,
     }
     case 'TRUE_FALSE':
       return (
-        <div>
+        <div className="choice-list">
           {[[true, 'Cert'], [false, 'Fals']].map(([v, t]) => (
-            <label key={t}>
+            <label className="choice-option" key={t}>
               <input type="radio" name={`q${q.id}`} disabled={disabled} checked={value === v} onChange={() => onChange(v)} /> {t}
             </label>
           ))}
@@ -75,10 +75,10 @@ export default function QuestionInput({ q, value, onChange, attemptId, fileName,
             const item = c.items.find((entry) => entry.id === id);
             if (!item) return null;
             return (
-              <li key={id} className="row">
-                <span>{item.text}</span>
-                <button type="button" className="secondary" disabled={disabled || index === 0} onClick={() => move(index, -1)} aria-label={`Mou ${item.text} amunt`}>↑</button>
-                <button type="button" className="secondary" disabled={disabled || index === orderedIds.length - 1} onClick={() => move(index, 1)} aria-label={`Mou ${item.text} avall`}>↓</button>
+              <li key={id} className="ordering-answer-row">
+                <button type="button" className="secondary ordering-move" disabled={disabled || index === 0} onClick={() => move(index, -1)} aria-label={`Mou ${item.text} amunt`}>↑</button>
+                <button type="button" className="secondary ordering-move" disabled={disabled || index === orderedIds.length - 1} onClick={() => move(index, 1)} aria-label={`Mou ${item.text} avall`}>↓</button>
+                <span className="ordering-answer-text">{item.text}</span>
               </li>
             );
           })}
