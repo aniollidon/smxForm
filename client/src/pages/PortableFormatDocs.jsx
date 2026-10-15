@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 
 const example = `{
-  "format": "smxform.quiz",
+  "format": "palamForm.quiz",
   "version": 1,
   "title": "La cèl·lula",
   "description": "Qüestionari de biologia",
@@ -49,18 +49,18 @@ export default function PortableFormatDocs() {
   return (
     <main className="format-docs">
       <header className="format-header">
-        <Link to="/" className="format-brand">smxForm <span>/ Format obert</span></Link>
+        <Link to="/" className="format-brand">palamForm <span>/ Format obert</span></Link>
         <Link to="/t">Espai del professorat ↗</Link>
       </header>
       <article className="format-content">
         <span className="eyebrow">ESPECIFICACIÓ PÚBLICA · VERSIÓ 1</span>
-        <h1>Format d’entregues smxForm</h1>
+        <h1>Format d’entregues palamForm</h1>
         <p className="format-intro">Un fitxer JSON de text pla amb preguntes, respostes correctes i configuració. Els noms de camps i les respostes són semàntics: es pot redactar a mà o generar amb una LLM sense conèixer cap identificador intern.</p>
 
         <h2>Envolupant del document</h2>
         <p>El document és un objecte JSON UTF-8. Té exactament aquests camps principals necessaris (es poden afegir camps desconeguts, que la importació ignora):</p>
         <div className="format-table-wrap"><table><tbody>
-          <Field name="format">Obligatori. Cadena literal <code>smxform.quiz</code>.</Field>
+          <Field name="format">Obligatori. Cadena literal <code>palamForm.quiz</code>.</Field>
           <Field name="version">Obligatori. Enter <code>1</code>. Les altres versions es rebutgen.</Field>
           <Field name="title">Obligatori. Text d’1 a 200 caràcters.</Field>
           <Field name="description">Opcional. Cadena de fins a 5000 caràcters; per defecte, cadena buida.</Field>
@@ -107,6 +107,10 @@ export default function PortableFormatDocs() {
 "pairs": [{"left":"HTTP", "right":"80"}, {"left":"HTTPS", "right":"443"}],
 "distractors": ["21"]`}</code></pre>
 
+  <h3><code>ORDERING</code> · Ordenar una llista</h3>
+  <p><code>items</code> és una llista de 2 a 30 cadenes no buides (fins a 500 caràcters cadascuna) en l’ordre correcte. Durant l’intent es poden reordenar; la puntuació parcial correspon als elements que queden a la posició correcta.</p>
+  <pre><code>{`"type": "ORDERING", "items": ["Planifica", "Executa", "Avalua"]`}</code></pre>
+
         <h3><code>IMAGE_LABEL</code> · Etiquetar una imatge</h3>
         <p><code>image</code> és obligatori. <code>markers</code> és una llista d’1 a 30 punts. Cada punt conté <code>x</code> i <code>y</code> (nombres de 0 a 100, percentatge des de l’angle superior esquerre) i <code>label</code> (la resposta correcta). <code>predefined</code> és booleà: true fa que l’alumne triï d’una llista. <code>extraLabels</code> és una llista opcional de distractors de text, només utilitzada quan <code>predefined</code> és true.</p>
         <pre><code>{`"type": "IMAGE_LABEL", "image": "data:image/png;base64,...",
@@ -130,9 +134,9 @@ export default function PortableFormatDocs() {
         <pre className="format-example"><code>{example}</code></pre>
 
         <h2>Generació amb una LLM</h2>
-        <p>Indiqueu a la LLM que retorni només un objecte JSON vàlid, sense blocs Markdown; demaneu <code>format: "smxform.quiz"</code>, <code>version: 1</code> i que cada opció inclogui explícitament <code>correct</code>. Les imatges necessiten dades base64 reals i coordenades mesurades, així que no demaneu a una LLM que inventi una data URI. Reviseu sempre la clau de respostes abans de publicar.</p>
+        <p>Indiqueu a la LLM que retorni només un objecte JSON vàlid, sense blocs Markdown; demaneu <code>format: "palamForm.quiz"</code>, <code>version: 1</code> i que cada opció inclogui explícitament <code>correct</code>. Les imatges necessiten dades base64 reals i coordenades mesurades, així que no demaneu a una LLM que inventi una data URI. Reviseu sempre la clau de respostes abans de publicar.</p>
         <p>Per importar: des de <Link to="/t">l’espai del professorat</Link>, trieu <strong>Importa JSON</strong>. La importació valida tot el document abans de crear l’entrega, puja les imatges incrustades i obre el resultat com a esborrany. El límit del fitxer és 50 MiB. Per exportar, feu servir <strong>Exporta JSON</strong> a l’editor d’una entrega.</p>
-        <p className="format-back"><Link to="/">Torna a smxForm</Link></p>
+        <p className="format-back"><Link to="/">Torna a palamForm</Link></p>
       </article>
     </main>
   );

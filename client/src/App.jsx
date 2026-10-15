@@ -9,6 +9,7 @@ import TeacherHome from './pages/TeacherHome.jsx';
 import QuizEditor from './pages/QuizEditor.jsx';
 import Attempts from './pages/Attempts.jsx';
 import AttemptReview from './pages/AttemptReview.jsx';
+import QuestionReview from './pages/QuestionReview.jsx';
 import PortableFormatDocs from './pages/PortableFormatDocs.jsx';
 import QuizPreview from './pages/QuizPreview.jsx';
 import ArchitectureArt from './components/ArchitectureArt.jsx';
@@ -19,7 +20,7 @@ function Login() {
   return (
     <main className="login-page">
       <section className="login-visual">
-        <div className="login-brand"><span className="brand-mark"><i /><i /><i /><i /></span> smxForm <span className="login-edition">INSTITUT DE PALAMÓS</span></div>
+        <div className="login-brand"><span className="brand-mark"><i /><i /><i /><i /></span> palamForm <span className="login-edition">INSTITUT DE PALAMÓS</span></div>
         <div className="login-copy">
           <span className="eyebrow">ESPAI DIGITAL · INSPALAMOS</span>
           <h1>Aprendre.<br /><span>Crear. Avançar.</span></h1>
@@ -40,7 +41,7 @@ function Login() {
           {import.meta.env.DEV && <a className="login-note" href="/auth/dev?n=1">Dev: entra com a alumne de prova</a>}
           <p className="login-note">Només comptes @inspalamos.cat</p>
         </div>
-        <span className="login-version">SMXFORM / 01</span>
+        <span className="login-version">palamForm / 01</span>
       </section>
     </main>
   );
@@ -56,10 +57,10 @@ function Layout({ user, children }) {
   };
   return (
     <div className="app-shell">
-      <div className="announcement-bar"><span>SMXFORM</span><span>ENTORN D'APRENENTATGE DIGITAL</span><span className="announcement-status"><i /> OPERATIU</span></div>
+      <div className="announcement-bar"><span>palamForm</span><span>ENTORN D'APRENENTATGE DIGITAL</span><span className="announcement-status"><i /> OPERATIU</span></div>
       <header className="top app-header">
-        <Link className="brand-lockup" to={user.role === 'TEACHER' ? '/t' : '/s'} aria-label="smxForm, inici">
-          <span className="brand-mark"><i /><i /><i /><i /></span><span>smx<span>Form</span></span>
+        <Link className="brand-lockup" to={user.role === 'TEACHER' ? '/t' : '/s'} aria-label="palamForm, inici">
+          <span className="brand-mark"><i /><i /><i /><i /></span><span>palam<span>Form</span></span>
         </Link>
         <nav className="app-nav" aria-label="Navegació principal">
           <Link to="/s" className={location.pathname.startsWith('/s') || location.pathname.startsWith('/q') || location.pathname.startsWith('/attempt') ? 'active' : ''}>Alumne</Link>
@@ -102,6 +103,7 @@ export default function App() {
       <Route path="/t/quiz/:id" element={<Protected teacher><QuizEditor /></Protected>} />
       <Route path="/t/quiz/:id/preview" element={<Protected teacher><QuizPreview /></Protected>} />
       <Route path="/t/quiz/:id/attempts" element={<Protected teacher><Attempts /></Protected>} />
+      <Route path="/t/quiz/:id/question/:qid/answers" element={<Protected teacher><QuestionReview /></Protected>} />
       <Route path="/t/attempt/:id" element={<Protected teacher><AttemptReview /></Protected>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

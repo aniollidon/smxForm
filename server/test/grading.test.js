@@ -24,6 +24,13 @@ test('MATCHING', () => {
   assert.strictEqual(scoreQuestion(m, { 1: 'x' }).score, 1);
 });
 
+test('ORDERING dona puntuació parcial pels elements ben posicionats', () => {
+  const ordering = q('ORDERING', { order: ['a', 'b', 'c', 'd'] });
+  assert.strictEqual(scoreQuestion(ordering, ['a', 'b', 'c', 'd']).score, 2);
+  assert.strictEqual(scoreQuestion(ordering, ['b', 'a', 'c', 'd']).score, 1);
+  assert.strictEqual(scoreQuestion(ordering, ['a']).score, 0.5);
+});
+
 test('IMAGE_LABEL i SHORT_TEXT normalitzats', () => {
   assert.strictEqual(scoreQuestion(q('IMAGE_LABEL', { labels: { p1: 'Cor' } }), { p1: ' cor ' }).score, 2);
   assert.strictEqual(scoreQuestion(q('SHORT_TEXT', { accepted: ['Àtom'] }), 'atom').score, 2);

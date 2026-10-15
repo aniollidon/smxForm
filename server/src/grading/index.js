@@ -16,6 +16,7 @@ function isAnswered(type, value) {
     case 'TRUE_FALSE':
       return typeof value === 'boolean';
     case 'MATCHING':
+    case 'ORDERING':
     case 'IMAGE_LABEL':
       return typeof value === 'object' && Object.values(value).some((v) => v !== '' && v != null);
     case 'SHORT_TEXT':
@@ -59,6 +60,13 @@ function gradeQuestion(question, value) {
       const ok = ids.filter((l) => String(value[l]) === String(pairs[l])).length;
       const bad = ids.filter((l) => value[l] != null && value[l] !== '' && String(value[l]) !== String(pairs[l])).length;
       fraction = Math.max(0, (ok - bad) / ids.length);
+      break;
+    }
+    case 'ORDERING': {
+      const order = key.order || [];
+      if (!order.length || !Array.isArray(value)) break;
+      const correct = order.filter((id, index) => String(value[index]) === String(id)).length;
+      fraction = correct / order.length;
       break;
     }
     case 'IMAGE_LABEL': {

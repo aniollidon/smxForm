@@ -44,7 +44,7 @@ export default function QuestionEditor({ initial, onSave, onCancel }) {
       <div className="row">
         <label>Punts <input type="number" min="0" step="0.25" value={d.points} onChange={(e) => set({ points: e.target.value })} /></label>
         <label><input type="checkbox" checked={d.required} onChange={(e) => set({ required: e.target.checked })} /> Obligatòria</label>
-        {['MCQ', 'MATCHING', 'IMAGE_LABEL'].includes(d.type) && (
+        {['MCQ', 'MATCHING', 'ORDERING', 'IMAGE_LABEL'].includes(d.type) && (
           <label><input type="checkbox" checked={d.shuffleOptions} onChange={(e) => set({ shuffleOptions: e.target.checked })} /> Respostes en ordre aleatori</label>
         )}
       </div>
@@ -98,6 +98,22 @@ export default function QuestionEditor({ initial, onSave, onCancel }) {
           ))}
           <button className="secondary" onClick={() => set({ pairs: [...d.pairs, { left: '', right: '' }] })}>+ Parella</button>
           <label>Opcions de distracció (una per línia)<textarea value={d.distractors} onChange={(e) => set({ distractors: e.target.value })} /></label>
+        </div>
+      )}
+
+      {d.type === 'ORDERING' && (
+        <div className="stack">
+          <p className="muted">Escriu els elements en l’ordre correcte.</p>
+          {d.items.map((item, index) => (
+            <div className="row" key={item.id}>
+              <span className="badge">{index + 1}</span>
+              <input type="text" maxLength={500} style={{ flex: 1, width: 'auto' }} placeholder={`Element ${index + 1}`} value={item.text} onChange={(e) => set({ items: d.items.map((entry) => (entry.id === item.id ? { ...entry, text: e.target.value } : entry)) })} />
+              <button className="secondary" disabled={index === 0} onClick={() => set({ items: d.items.map((entry, i) => i === index - 1 ? d.items[index] : i === index ? d.items[index - 1] : entry) })} aria-label="Mou amunt">↑</button>
+              <button className="secondary" disabled={index === d.items.length - 1} onClick={() => set({ items: d.items.map((entry, i) => i === index ? d.items[index + 1] : i === index + 1 ? d.items[index] : entry) })} aria-label="Mou avall">↓</button>
+              {d.items.length > 2 && <button className="secondary" onClick={() => set({ items: d.items.filter((entry) => entry.id !== item.id) })} aria-label="Elimina element">✕</button>}
+            </div>
+          ))}
+          {d.items.length < 30 && <button className="secondary" onClick={() => set({ items: [...d.items, { id: uid(), text: '' }] })}>+ Element</button>}
         </div>
       )}
 

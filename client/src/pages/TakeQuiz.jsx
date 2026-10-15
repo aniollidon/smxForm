@@ -18,7 +18,7 @@ function QuestionResult({ q }) {
   const key = q.answerKey || {};
   const options = q.config?.options || [];
   const scoreTone = q.score == null ? 'pending' : q.score >= q.points ? 'correct' : q.score > 0 ? 'partial' : 'incorrect';
-  const status = q.score == null ? 'Pendent de correcció' : q.score >= q.points ? 'Correcte' : q.score > 0 ? 'Parcialment correcte' : 'Per revisar';
+  const status = q.score == null ? 'Pendent de correcció' : q.score >= q.points ? 'Correcte' : q.score > 0 ? 'Parcialment correcte' : 'Incorrecte';
 
   let answers;
   switch (q.type) {
@@ -34,7 +34,7 @@ function QuestionResult({ q }) {
               <div className={`answer-option${isCorrect ? ' answer-correct' : isSelected ? ' answer-incorrect' : ''}`} key={option.id}>
                 <span>{option.text}</span>
                 <span className="answer-option-tags">
-                  {isSelected && <span className="answer-tag">La teva tria</span>}
+                  {isSelected && <span className="answer-tag">Has respost</span>}
                   {isCorrect && <span className="answer-tag">Correcta</span>}
                 </span>
               </div>
@@ -72,6 +72,21 @@ function QuestionResult({ q }) {
         </div>
       );
       break;
+    case 'ORDERING': {
+      const orderedIds = Array.isArray(value) ? value : [];
+      const correctOrder = key.order || [];
+      answers = (
+        <div className="answer-columns">
+          <AnswerBlock label="El teu ordre" tone={scoreTone === 'correct' ? 'correct' : scoreTone === 'pending' ? '' : 'incorrect'}>
+            <ol>{orderedIds.map((id) => <li key={id}>{q.config?.items?.find((item) => item.id === id)?.text ?? id}</li>)}</ol>
+          </AnswerBlock>
+          <AnswerBlock label="Ordre correcte" tone="correct">
+            <ol>{correctOrder.map((id) => <li key={id}>{q.config?.items?.find((item) => item.id === id)?.text ?? id}</li>)}</ol>
+          </AnswerBlock>
+        </div>
+      );
+      break;
+    }
     case 'IMAGE_LABEL':
       answers = (
         <div className="answer-image-labels">

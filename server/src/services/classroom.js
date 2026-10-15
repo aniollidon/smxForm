@@ -79,33 +79,49 @@ function dueDateOf(cw) {
   return new Date(Date.UTC(cw.dueDate.year, cw.dueDate.month - 1, cw.dueDate.day, t.hours ?? 23, t.minutes ?? 59));
 }
 
-// Retorna { ok, reason } segons assignaciÃ³ de l'alumne i dates de la tasca
-async function checkStudentAccess(quiz, email) {
-  if (!quiz.classroomCourseId || !quiz.classroomCourseWorkId) return { ok: true };
-  const c = await classroomFor(quiz.teacherId);
-  const cw = (await c.courses.courseWork.get({ courseId: quiz.classroomCourseId, id: quiz.classroomCourseWorkId })).data;
-  if (cw.state !== 'PUBLISHED') return { ok: false, reason: 'La tasca encara no estÃ  publicada al Classroom' };
-  const due = dueDateOf(cw);
-  if (due && new Date() > due) return { ok: false, reason: 'S\'ha acabat el termini de la tasca' };
-  if (cw.scheduledTime && new Date(cw.scheduledTime) > new Date()) return { ok: false, reason: 'La tasca encara no estÃ  disponible' };
+async function studentSubmission(c, link, email) {
   try {
     const subs = await c.courses.courseWork.studentSubmissions.list({
-      courseId: quiz.classroomCourseId,
-      courseWorkId: quiz.classroomCourseWorkId,
+      courseId: link.courseId,
+      courseWorkId: link.courseWorkId,
       userId: email,
     });
-    if (!(subs.data.studentSubmissions || []).length) return { ok: false, reason: 'No tens aquesta tasca assignada' };
+    return (subs.data.studentSubmissions || [])[0] || null;
   } catch (e) {
-    return { ok: false, reason: 'No tens aquesta tasca assignada' };
+    return null;
   }
+}
+
+async function checkLink(c, link) {
+  const cw = (await c.courses.courseWork.get({ courseId: link.courseId, id: link.courseWorkId })).data;
+  if (cw.state !== 'PUBLISHED') return { ok: false, reason: 'La tasca encara no està publicada al Classroom' };
+  const due = dueDateOf(cw);
+  if (due && new Date() > due) return { ok: false, reason: 'S\'ha acabat el termini de la tasca' };
+  if (cw.scheduledTime && new Date(cw.scheduledTime) > new Date()) return { ok: false, reason: 'La tasca encara no està disponible' };
   return { ok: true };
 }
 
-// Exporta nota (millor o Ãºltima) de cada alumne
+// Retorna { ok, reason }: l'alumne ha d'estar assignat a la tasca d'algun curs vinculat i aquesta ha d'estar oberta
+async function checkStudentAccess(quiz, email) {
+  const links = await prisma.quizClassroom.findMany({ where: { quizId: quiz.id } });
+  if (!links.length) return { ok: true };
+  const c = await classroomFor(quiz.teacherId);
+  let firstReason = null;
+  for (const link of links) {
+    if (!(await studentSubmission(c, link, email))) continue;
+    const r = await checkLink(c, link);
+    if (r.ok) return r;
+    firstReason ||= r.reason;
+  }
+  return { ok: false, reason: firstReason || 'No tens aquesta tasca assignada' };
+}
+
+// Exporta nota (millor o última) de cada alumne al curs o cursos on és
 async function exportGrades(quizId, { returnToStudents = false } = {}) {
   const quiz = await prisma.quiz.findUnique({ where: { id: quizId } });
-  if (!quiz.classroomCourseId || !quiz.classroomCourseWorkId) {
-    const e = new Error('El quiz no estÃ  vinculat a cap tasca');
+  const links = await prisma.quizClassroom.findMany({ where: { quizId } });
+  if (!links.length) {
+    const e = new Error('El quiz no està vinculat a cap tasca');
     e.status = 409;
     throw e;
   }
@@ -123,28 +139,28 @@ async function exportGrades(quizId, { returnToStudents = false } = {}) {
   const results = [];
   for (const a of byUser.values()) {
     try {
-      const subs = await c.courses.courseWork.studentSubmissions.list({
-        courseId: quiz.classroomCourseId,
-        courseWorkId: quiz.classroomCourseWorkId,
-        userId: a.user.email,
-      });
-      const sub = (subs.data.studentSubmissions || [])[0];
-      if (!sub) throw new Error('Sense submission');
-      await c.courses.courseWork.studentSubmissions.patch({
-        courseId: quiz.classroomCourseId,
-        courseWorkId: quiz.classroomCourseWorkId,
-        id: sub.id,
-        updateMask: 'assignedGrade,draftGrade',
-        requestBody: { assignedGrade: a.score, draftGrade: a.score },
-      });
-      if (returnToStudents) {
-        await c.courses.courseWork.studentSubmissions.return({
-          courseId: quiz.classroomCourseId,
-          courseWorkId: quiz.classroomCourseWorkId,
+      let exported = 0;
+      for (const link of links) {
+        const sub = await studentSubmission(c, link, a.user.email);
+        if (!sub) continue;
+        await c.courses.courseWork.studentSubmissions.patch({
+          courseId: link.courseId,
+          courseWorkId: link.courseWorkId,
           id: sub.id,
-          requestBody: {},
+          updateMask: 'assignedGrade,draftGrade',
+          requestBody: { assignedGrade: a.score, draftGrade: a.score },
         });
+        if (returnToStudents) {
+          await c.courses.courseWork.studentSubmissions.return({
+            courseId: link.courseId,
+            courseWorkId: link.courseWorkId,
+            id: sub.id,
+            requestBody: {},
+          });
+        }
+        exported++;
       }
+      if (!exported) throw new Error('Sense submission');
       await prisma.attempt.update({ where: { id: a.id }, data: { exportedAt: new Date(), exportedScore: a.score } });
       results.push({ email: a.user.email, score: a.score, ok: true });
     } catch (e) {

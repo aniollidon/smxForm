@@ -60,6 +60,7 @@ function Settings({ quiz, onSaved }) {
           <select value={f.showResults} onChange={(e) => set({ showResults: e.target.value })}>
             <option value="NONE">Res</option>
             <option value="SCORE">Només la nota</option>
+            <option value="FULL">Nota i respostes correctes</option>
           </select>
         </label>
         <label>A partir de (opcional) <input type="datetime-local" value={f.showResultsFrom} onChange={(e) => set({ showResultsFrom: e.target.value })} /></label>
@@ -82,6 +83,7 @@ function ClassroomPanel({ quiz, onSaved }) {
     try { await fn(); } catch (e) { setMsg(e.message); }
   };
   if (!me) return null;
+  const linked = new Set((quiz.classrooms || []).map((l) => l.courseId));
   return (
     <div className="card stack">
       <h3>Google Classroom</h3>
@@ -89,25 +91,39 @@ function ClassroomPanel({ quiz, onSaved }) {
         <a href="/auth/classroom"><button>Connecta amb Classroom</button></a>
       ) : (
         <>
-          {quiz.classroomCourseWorkId ? (
-            <p className="ok">Vinculada a la tasca {quiz.classroomCourseWorkId} (curs {quiz.classroomCourseId}). Publica la tasca al Classroom perquè els alumnes hi accedeixin.</p>
-          ) : (
-            <div className="row">
-              <button className="secondary" onClick={() => run(async () => { const c = await api('/api/teacher/classroom/courses'); setCourses(c); setCourse(c[0]?.id || ''); })}>Carrega cursos</button>
-              {courses && (
-                <>
-                  <select style={{ width: 'auto' }} value={course} onChange={(e) => setCourse(e.target.value)}>
-                    {courses.map((c) => <option key={c.id} value={c.id}>{c.name}{c.section ? ` (${c.section})` : ''}</option>)}
-                  </select>
-                  <button disabled={!course} onClick={() => run(async () => {
-                    await api(`/api/teacher/quizzes/${quiz.id}/classroom`, { method: 'POST', body: { courseId: course } });
-                    onSaved();
-                  })}>Crea la tasca «{quiz.title}»</button>
-                </>
-              )}
-            </div>
+          {quiz.classrooms?.length > 0 && (
+            <>
+              <ul>
+                {quiz.classrooms.map((l) => (
+                  <li key={l.courseId}>
+                    {l.courseName || `Curs ${l.courseId}`} (tasca {l.courseWorkId}){' '}
+                    <button className="secondary" onClick={() => run(async () => {
+                      await api(`/api/teacher/quizzes/${quiz.id}/classroom/${encodeURIComponent(l.courseId)}`, { method: 'DELETE' });
+                      onSaved();
+                    })}>Desvincula</button>
+                  </li>
+                ))}
+              </ul>
+              <p className="muted">Publica les tasques al Classroom perquè els alumnes hi accedeixin. Cada alumne només rep la nota al curs on és.</p>
+            </>
           )}
-          {quiz.classroomCourseWorkId && (
+          <div className="row">
+            <button className="secondary" onClick={() => run(async () => { const c = await api('/api/teacher/classroom/courses'); setCourses(c); setCourse(c.find((x) => !linked.has(x.id))?.id || ''); })}>Carrega cursos</button>
+            {courses && (
+              <>
+                <select style={{ width: 'auto' }} value={course} onChange={(e) => setCourse(e.target.value)}>
+                  {courses.filter((c) => !linked.has(c.id)).map((c) => <option key={c.id} value={c.id}>{c.name}{c.section ? ` (${c.section})` : ''}</option>)}
+                </select>
+                <button disabled={!course} onClick={() => run(async () => {
+                  const c = courses.find((x) => x.id === course);
+                  await api(`/api/teacher/quizzes/${quiz.id}/classroom`, { method: 'POST', body: { courseId: course, courseName: `${c.name}${c.section ? ` (${c.section})` : ''}` } });
+                  setCourses(null);
+                  onSaved();
+                })}>Crea la tasca «{quiz.title}»</button>
+              </>
+            )}
+          </div>
+          {quiz.classrooms?.length > 0 && (
             <div className="row">
               <label><input type="checkbox" checked={ret} onChange={(e) => setRet(e.target.checked)} /> Retorna les tasques als alumnes</label>
               <button disabled={quiz.gradingStatus?.needsRegrade > 0 || quiz.gradingStatus?.pendingReview > 0} onClick={() => run(async () => setResults(await api(`/api/teacher/quizzes/${quiz.id}/export`, { method: 'POST', body: { returnToStudents: ret } })))}>
@@ -175,7 +191,7 @@ export default function QuizEditor() {
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
-      anchor.download = `${quiz.title.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'entrega'}.smxform.json`;
+      anchor.download = `${quiz.title.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'entrega'}.palamForm.json`;
       anchor.click();
       URL.revokeObjectURL(url);
     } catch (error) {
@@ -232,7 +248,7 @@ export default function QuizEditor() {
           {quiz.gradingStatus.classroomUpdates > 0 && <p>Les notes ja exportades han canviat per a {quiz.gradingStatus.classroomUpdates} alumnes; actualitza-les també a Classroom.</p>}
           <div className="row">
             {quiz.gradingStatus.needsRegrade > 0 && <button disabled={!!gradeAction} onClick={regrade}>{gradeAction === 'regrade' ? 'Reavaluant…' : 'Reavalua intents'}</button>}
-            {quiz.gradingStatus.classroomUpdates > 0 && quiz.classroomCourseWorkId && <button className="secondary" disabled={!!gradeAction || quiz.gradingStatus.needsRegrade > 0 || quiz.gradingStatus.pendingReview > 0} onClick={updateClassroom}>{gradeAction === 'classroom' ? 'Actualitzant…' : 'Actualitza Classroom'}</button>}
+            {quiz.gradingStatus.classroomUpdates > 0 && quiz.classrooms?.length > 0 && <button className="secondary" disabled={!!gradeAction || quiz.gradingStatus.needsRegrade > 0 || quiz.gradingStatus.pendingReview > 0} onClick={updateClassroom}>{gradeAction === 'classroom' ? 'Actualitzant…' : 'Actualitza Classroom'}</button>}
             {gradeMessage && <span className="muted">{gradeMessage}</span>}
           </div>
         </div>
@@ -249,6 +265,7 @@ export default function QuizEditor() {
               <span className="badge">{TYPE_LABELS[q.type]}</span> {i + 1}. {q.text.slice(0, 100)} <span className="muted">({q.points} pt{q.required ? ', obligatòria' : ''})</span>
             </div>
             <div className="row">
+              {['LONG_TEXT', 'IMAGE_UPLOAD'].includes(q.type) && <Link className="question-answer-shortcut" to={`/t/quiz/${id}/question/${q.id}/answers`}>Veure respostes ↗</Link>}
               <button className="secondary" disabled={i === 0} onClick={() => move(i, -1)}>↑</button>
               <button className="secondary" disabled={i === quiz.questions.length - 1} onClick={() => move(i, 1)}>↓</button>
               <button className="secondary" onClick={() => setEditing(fromQuestion(q))}>Edita</button>

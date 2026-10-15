@@ -5,6 +5,7 @@ export const TYPE_LABELS = {
   MCQ: 'Test (A/B/C…)',
   TRUE_FALSE: 'Cert / Fals',
   MATCHING: 'Relacionar conceptes',
+  ORDERING: 'Ordenar una llista',
   IMAGE_LABEL: 'Etiquetar imatge',
   SHORT_TEXT: 'Resposta breu',
   LONG_TEXT: 'Resposta llarga',
@@ -14,7 +15,7 @@ export const TYPE_LABELS = {
 const lines = (s) => s.split('\n').map((x) => x.trim()).filter(Boolean);
 
 export function emptyDraft(type) {
-  const base = { type, text: '', imageUrl: null, points: 1, required: true, shuffleOptions: ['MCQ', 'MATCHING', 'IMAGE_LABEL'].includes(type) };
+  const base = { type, text: '', imageUrl: null, points: 1, required: true, shuffleOptions: ['MCQ', 'MATCHING', 'ORDERING', 'IMAGE_LABEL'].includes(type) };
   switch (type) {
     case 'MCQ':
       return { ...base, multiple: false, opts: [{ id: uid(), text: '', correct: true }, { id: uid(), text: '', correct: false }] };
@@ -22,6 +23,8 @@ export function emptyDraft(type) {
       return { ...base, correct: true };
     case 'MATCHING':
       return { ...base, pairs: [{ left: '', right: '' }, { left: '', right: '' }], distractors: '' };
+    case 'ORDERING':
+      return { ...base, items: [{ id: uid(), text: '' }, { id: uid(), text: '' }] };
     case 'IMAGE_LABEL':
       return { ...base, points_: [], predefined: false, extraLabels: '' };
     case 'SHORT_TEXT':
@@ -48,6 +51,10 @@ export function fromQuestion(q) {
         pairs: c.left.map((l) => ({ left: l.text, right: c.right.find((r) => r.id === k.pairs[l.id])?.text ?? '' })),
         distractors: c.right.filter((r) => !used.has(r.id)).map((r) => r.text).join('\n'),
       };
+    }
+    case 'ORDERING': {
+      const itemsById = new Map(c.items.map((item) => [item.id, item]));
+      return { ...base, items: (k.order || []).map((id) => itemsById.get(id)).filter(Boolean) };
     }
     case 'IMAGE_LABEL': {
       const usedLabels = new Set(Object.values(k.labels));
@@ -85,6 +92,10 @@ export function toPayload(d) {
       p.answerKey = { pairs: Object.fromEntries(d.pairs.map((_, i) => [`l${i}`, `r${i}`])) };
       break;
     }
+    case 'ORDERING':
+      p.config = { items: d.items.map(({ id, text }) => ({ id, text })) };
+      p.answerKey = { order: d.items.map((item) => item.id) };
+      break;
     case 'IMAGE_LABEL': {
       p.config = {
         points: d.points_.map(({ id, x, y }) => ({ id, x, y })),
@@ -113,6 +124,9 @@ export function validateDraft(d) {
       break;
     case 'MATCHING':
       if (d.pairs.some((x) => !x.left.trim() || !x.right.trim())) return 'Completa totes les parelles';
+      break;
+    case 'ORDERING':
+      if (d.items.length < 2 || d.items.length > 30 || d.items.some((item) => !item.text.trim() || item.text.length > 500)) return 'Afegeix de 2 a 30 elements amb text de fins a 500 caràcters';
       break;
     case 'IMAGE_LABEL':
       if (!d.imageUrl) return 'Puja una imatge';

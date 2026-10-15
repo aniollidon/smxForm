@@ -13,7 +13,7 @@ router.use(requireTeacher);
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 const fail = (status, msg) => Object.assign(new Error(msg), { status });
 
-const TYPES = ['MCQ', 'TRUE_FALSE', 'MATCHING', 'IMAGE_LABEL', 'SHORT_TEXT', 'LONG_TEXT', 'IMAGE_UPLOAD'];
+const TYPES = ['MCQ', 'TRUE_FALSE', 'MATCHING', 'ORDERING', 'IMAGE_LABEL', 'SHORT_TEXT', 'LONG_TEXT', 'IMAGE_UPLOAD'];
 const id = z.union([z.string(), z.number()]).transform(String);
 const item = z.object({ id, text: z.string().max(500) });
 
@@ -21,6 +21,7 @@ const configSchemas = {
   MCQ: z.object({ options: z.array(item).min(2).max(12), multiple: z.boolean().default(false) }),
   TRUE_FALSE: z.object({}).passthrough(),
   MATCHING: z.object({ left: z.array(item).min(2).max(12), right: z.array(item).min(2).max(15) }),
+  ORDERING: z.object({ items: z.array(item.extend({ text: z.string().trim().min(1).max(500) })).min(2).max(30) }),
   IMAGE_LABEL: z.object({
     points: z.array(z.object({ id, x: z.number().min(0).max(100), y: z.number().min(0).max(100) })).min(1).max(30),
     labels: z.array(z.string().max(100)).nullable().default(null),
@@ -33,6 +34,7 @@ const keySchemas = {
   MCQ: z.object({ correct: z.array(id).min(1), allOrNothing: z.boolean().optional() }),
   TRUE_FALSE: z.object({ correct: z.boolean() }),
   MATCHING: z.object({ pairs: z.record(id) }),
+  ORDERING: z.object({ order: z.array(id).min(2).max(30) }),
   IMAGE_LABEL: z.object({ labels: z.record(z.string()) }),
   SHORT_TEXT: z.object({ accepted: z.array(z.string()).default([]), regex: z.string().max(200).optional() }),
   LONG_TEXT: z.object({ reference: z.string().optional() }).passthrough(),
@@ -58,6 +60,10 @@ function parseQuestion(body) {
     const l = new Set(q.config.left.map((x) => x.id));
     const r = new Set(q.config.right.map((x) => x.id));
     for (const [a, b] of Object.entries(q.answerKey.pairs)) if (!l.has(a) || !r.has(b)) throw fail(400, 'Parelles invàlides');
+  }
+  if (q.type === 'ORDERING') {
+    const ids = new Set(q.config.items.map((entry) => entry.id));
+    if (ids.size !== q.config.items.length || q.answerKey.order.length !== ids.size || !q.answerKey.order.every((entryId) => ids.has(entryId)) || new Set(q.answerKey.order).size !== ids.size) throw fail(400, 'Ordre invàlid');
   }
   if (q.type === 'MCQ') {
     const o = new Set(q.config.options.map((x) => x.id));
@@ -104,7 +110,7 @@ router.get('/quizzes', wrap(async (req, res) => {
   const quizzes = await prisma.quiz.findMany({
     where: { teacherId: req.user.id },
     orderBy: { createdAt: 'desc' },
-    include: { _count: { select: { questions: true, attempts: true } } },
+    include: { classrooms: true, _count: { select: { questions: true, attempts: true } } },
   });
   const attempts = quizzes.length ? await prisma.attempt.findMany({
     where: { quizId: { in: quizzes.map((quiz) => quiz.id) }, status: { not: 'IN_PROGRESS' } },
@@ -140,6 +146,7 @@ router.get('/quizzes/by-slug/:slug', wrap(async (req, res) => {
 
 router.get('/quizzes/:id', wrap(async (req, res) => {
   const quiz = await ownQuiz(req, {
+    classrooms: true,
     questions: { orderBy: { order: 'asc' } },
     attempts: {
       where: { status: { not: 'IN_PROGRESS' } },
@@ -173,7 +180,7 @@ router.delete('/quizzes/:id', wrap(async (req, res) => {
 
 router.post('/quizzes/:id/duplicate', wrap(async (req, res) => {
   const src = await ownQuiz(req, { questions: true });
-  const { id: _i, createdAt, questions, classroomCourseId, classroomCourseWorkId, publicSlug, ...rest } = src;
+  const { id: _i, createdAt, questions, publicSlug, ...rest } = src;
   const copy = await prisma.quiz.create({
     data: {
       ...rest,
@@ -272,19 +279,24 @@ router.get('/attempts/:aid', wrap(async (req, res) => {
     include: { quiz: true, user: { select: { email: true, name: true } }, answers: { include: { question: true } } },
   });
   if (!a || a.quiz.teacherId !== req.user.id) throw fail(404, 'Intent no trobat');
-  const pendingReviews = await prisma.answer.groupBy({
-    by: ['questionId'],
-    where: {
-      question: { quizId: a.quizId },
-      attempt: { status: { not: 'IN_PROGRESS' } },
-      needsReview: true,
-    },
-    _count: { _all: true },
-  });
   res.json({
     ...a,
     answers: a.answers.map((x) => ({ ...x, value: JSON.parse(x.value), question: present(x.question) })),
-    manualReviewCounts: Object.fromEntries(pendingReviews.map((item) => [item.questionId, item._count._all])),
+  });
+}));
+
+router.get('/questions/:qid/answers', wrap(async (req, res) => {
+  const question = await ownQuestion(req);
+  if (!['LONG_TEXT', 'IMAGE_UPLOAD'].includes(question.type)) throw fail(400, 'Aquesta pregunta no té correcció manual');
+  const answers = await prisma.answer.findMany({
+    where: { questionId: question.id, attempt: { status: { not: 'IN_PROGRESS' } } },
+    include: { attempt: { include: { user: { select: { name: true, email: true } } } } },
+    orderBy: { id: 'desc' },
+  });
+  res.json({
+    question: present(question),
+    quizId: question.quizId,
+    answers: answers.map((answer) => ({ ...answer, value: JSON.parse(answer.value) })),
   });
 }));
 
@@ -304,41 +316,14 @@ router.put('/answers/:id/review', wrap(async (req, res) => {
   res.json(attempt);
 }));
 
-router.put('/questions/:qid/review-all', wrap(async (req, res) => {
-  const question = await ownQuestion(req);
-  if (!['LONG_TEXT', 'IMAGE_UPLOAD'].includes(question.type)) throw fail(400, 'Aquesta pregunta no admet correcció manual');
-  const body = z.object({ score: z.number(), feedback: z.string().max(2000).optional() }).parse(req.body);
-  if (body.score < 0 || body.score > question.points) throw fail(400, 'Puntuació fora de rang');
-  const answers = await prisma.answer.findMany({
-    where: { questionId: question.id, needsReview: true, attempt: { status: { not: 'IN_PROGRESS' } } },
-    select: { id: true, attemptId: true },
-  });
-  const attemptIds = [...new Set(answers.map((answer) => answer.attemptId))];
-  await prisma.$transaction(async (tx) => {
-    for (const answer of answers) {
-      await tx.answer.update({
-        where: { id: answer.id },
-        data: {
-          score: body.score,
-          feedback: body.feedback ?? null,
-          needsReview: false,
-          questionGradingVersion: question.gradingVersion,
-        },
-      });
-    }
-    for (const attemptId of attemptIds) await recomputeAttempt(attemptId, tx);
-  });
-  res.json({ reviewed: answers.length, attempts: attemptIds.length });
-}));
-
-async function recomputeAttempt(attemptId, db = prisma) {
-  const attempt = await db.attempt.findUnique({
+async function recomputeAttempt(attemptId) {
+  const attempt = await prisma.attempt.findUnique({
     where: { id: attemptId },
     include: { quiz: { include: { questions: true } }, answers: true },
   });
   const map = new Map(attempt.answers.map((a) => [a.questionId, a]));
   const { score, pending } = computeAttemptScore(attempt.quiz, attempt.quiz.questions, map);
-  return db.attempt.update({
+  return prisma.attempt.update({
     where: { id: attemptId },
     data: {
       score: pending ? null : score,
@@ -355,17 +340,24 @@ router.get('/classroom/courses', wrap(async (req, res) => {
 
 router.post('/quizzes/:id/classroom', wrap(async (req, res) => {
   const quiz = await ownQuiz(req);
-  const body = z.object({ courseId: z.string().min(1), courseWorkId: z.string().optional() }).parse(req.body);
+  const body = z.object({ courseId: z.string().min(1), courseName: z.string().max(200).optional(), courseWorkId: z.string().optional() }).parse(req.body);
+  const existing = await prisma.quizClassroom.findUnique({ where: { quizId_courseId: { quizId: quiz.id, courseId: body.courseId } } });
+  if (existing) throw fail(409, 'Aquest curs ja està vinculat');
   let courseWorkId = body.courseWorkId;
   if (!courseWorkId) {
     const link = `${process.env.BASE_URL}/q/${quiz.publicSlug}`;
     courseWorkId = await classroom.createCourseWork(quiz, body.courseId, link);
   }
-  const updated = await prisma.quiz.update({
-    where: { id: quiz.id },
-    data: { classroomCourseId: body.courseId, classroomCourseWorkId: courseWorkId },
+  const created = await prisma.quizClassroom.create({
+    data: { quizId: quiz.id, courseId: body.courseId, courseWorkId, courseName: body.courseName || '' },
   });
-  res.json(updated);
+  res.json(created);
+}));
+
+router.delete('/quizzes/:id/classroom/:courseId', wrap(async (req, res) => {
+  const quiz = await ownQuiz(req);
+  await prisma.quizClassroom.deleteMany({ where: { quizId: quiz.id, courseId: req.params.courseId } });
+  res.json({ ok: true });
 }));
 
 router.post('/quizzes/:id/export', wrap(async (req, res) => {

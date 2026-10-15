@@ -14,6 +14,7 @@ function Value({ a }) {
     case 'MCQ': return <>{value.map((v) => optText(q, 'options', v)).join(', ')}</>;
     case 'TRUE_FALSE': return <>{value ? 'Cert' : 'Fals'}</>;
     case 'MATCHING': return <ul>{Object.entries(value).map(([l, r]) => <li key={l}>{optText(q, 'left', l)} → {optText(q, 'right', r)}</li>)}</ul>;
+    case 'ORDERING': return <ol>{value.map((id) => <li key={id}>{q.config.items.find((item) => item.id === id)?.text ?? id}</li>)}</ol>;
     case 'IMAGE_LABEL':
       return (
         <div>
@@ -51,46 +52,6 @@ function ReviewForm({ a, onDone }) {
   );
 }
 
-function BulkReviewForm({ answer, count, onDone }) {
-  const [score, setScore] = useState('');
-  const [feedback, setFeedback] = useState('');
-  const [err, setErr] = useState('');
-  const [saving, setSaving] = useState(false);
-  const apply = async () => {
-    if (score === '') {
-      setErr('Indica una puntuació abans de continuar.');
-      return;
-    }
-    if (!window.confirm(`S'aplicarà aquesta puntuació a ${count} respostes pendents d'aquesta pregunta. Vols continuar?`)) return;
-    try {
-      setSaving(true);
-      await api(`/api/teacher/questions/${answer.question.id}/review-all`, {
-        method: 'PUT',
-        body: { score: Number(score), feedback },
-      });
-      onDone();
-    } catch (e) {
-      setErr(e.message);
-    } finally {
-      setSaving(false);
-    }
-  };
-  return (
-    <div className="review-bulk">
-      <div className="review-bulk-copy">
-        <b>Correcció en bloc</b>
-        <span>{count} {count === 1 ? 'resposta pendent' : 'respostes pendents'} en tots els intents</span>
-      </div>
-      <div className="review-manual-form">
-        <label>Puntuació comuna <input type="number" min="0" max={answer.question.points} step="0.25" value={score} onChange={(e) => setScore(e.target.value)} /></label>
-        <label className="review-feedback-field">Comentari comú <input type="text" placeholder="Opcional" value={feedback} onChange={(e) => setFeedback(e.target.value)} /></label>
-        <button className="secondary" onClick={apply} disabled={saving || count === 0}>{saving ? 'Aplicant…' : 'Corregeix-les totes'}</button>
-        {err && <span className="error">{err}</span>}
-      </div>
-    </div>
-  );
-}
-
 export default function AttemptReview() {
   const { id } = useParams();
   const qc = useQueryClient();
@@ -98,7 +59,7 @@ export default function AttemptReview() {
   if (isLoading) return <p>Carregant…</p>;
   const answers = [...data.answers].sort((a, b) => a.question.order - b.question.order);
   const manual = (a) => ['LONG_TEXT', 'IMAGE_UPLOAD'].includes(a.question.type);
-  const pendingCount = Object.values(data.manualReviewCounts || {}).reduce((total, count) => total + count, 0);
+  const pendingCount = answers.filter((a) => manual(a) && a.needsReview).length;
   const status = { NEEDS_REVIEW: 'Pendent de correcció', GRADED: 'Corregit', SUBMITTED: 'Enviat' }[data.status] || data.status;
   const refresh = () => qc.invalidateQueries({ queryKey: ['attempt-review', id] });
   return (
@@ -115,7 +76,7 @@ export default function AttemptReview() {
           <div className="review-metric review-total-score"><span>NOTA</span><b>{data.score ?? '—'} <i>/ {data.quiz.maxScore}</i></b></div>
           <div className="review-metric"><span>PREGUNTES</span><b>{answers.length}</b></div>
         </div>
-        {pendingCount > 0 && <p className="review-pending-note">{pendingCount} respostes manuals d'aquest qüestionari pendents de correcció</p>}
+        {pendingCount > 0 && <p className="review-pending-note">{pendingCount} respostes manuals pendents en aquest intent</p>}
       </header>
       <div className="review-section-heading">
         <div><span className="eyebrow">RESPOSTES</span><h2>Revisió de l'intent</h2></div>
@@ -131,9 +92,8 @@ export default function AttemptReview() {
           {manual(a) && a.question.answerKey.reference && <p className="review-reference"><span>REFERÈNCIA</span>{a.question.answerKey.reference}</p>}
           {manual(a) && (
             <div className="review-grading">
-              <span className="eyebrow">CORRECCIÓ D'AQUEST ALUMNE</span>
+              <div className="review-grading-heading"><span className="eyebrow">CORRECCIÓ D'AQUEST ALUMNE</span><Link to={`/t/quiz/${data.quizId}/question/${a.question.id}/answers`}>Totes les respostes d'aquesta pregunta →</Link></div>
               <ReviewForm a={a} onDone={refresh} />
-              {(data.manualReviewCounts?.[a.question.id] || 0) > 0 && <BulkReviewForm answer={a} count={data.manualReviewCounts[a.question.id]} onDone={refresh} />}
             </div>
           )}
         </article>

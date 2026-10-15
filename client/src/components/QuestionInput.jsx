@@ -62,6 +62,29 @@ export default function QuestionInput({ q, value, onChange, attemptId, fileName,
         </table>
       );
     }
+    case 'ORDERING': {
+      const orderedIds = value || c.items.map((item) => item.id);
+      const move = (index, direction) => {
+        const next = [...orderedIds];
+        [next[index], next[index + direction]] = [next[index + direction], next[index]];
+        onChange(next);
+      };
+      return (
+        <ol className="ordering-answer">
+          {orderedIds.map((id, index) => {
+            const item = c.items.find((entry) => entry.id === id);
+            if (!item) return null;
+            return (
+              <li key={id} className="row">
+                <span>{item.text}</span>
+                <button type="button" className="secondary" disabled={disabled || index === 0} onClick={() => move(index, -1)} aria-label={`Mou ${item.text} amunt`}>↑</button>
+                <button type="button" className="secondary" disabled={disabled || index === orderedIds.length - 1} onClick={() => move(index, 1)} aria-label={`Mou ${item.text} avall`}>↓</button>
+              </li>
+            );
+          })}
+        </ol>
+      );
+    }
     case 'IMAGE_LABEL': {
       const v = value || {};
       return (

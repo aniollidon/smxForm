@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { emptyDraft } from '../src/questionModel.js';
 
 test('new questions are required and shuffle options when supported', () => {
-  for (const type of ['MCQ', 'MATCHING', 'IMAGE_LABEL']) {
+  for (const type of ['MCQ', 'MATCHING', 'ORDERING', 'IMAGE_LABEL']) {
     const draft = emptyDraft(type);
     assert.equal(draft.required, true);
     assert.equal(draft.shuffleOptions, true);

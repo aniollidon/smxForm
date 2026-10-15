@@ -24,8 +24,6 @@ model Quiz {
   description           String     @default("")
   teacherId             Int
   teacher               User       @relation(fields: [teacherId], references: [id])
-  classroomCourseId     String?
-  classroomCourseWorkId String?
   maxScore              Float      @default(10)
   shuffleQuestions      Boolean    @default(false)
   allowRetry            Boolean    @default(false)
@@ -39,7 +37,19 @@ model Quiz {
   gradingVersion        Int        @default(0)
   questions             Question[]
   attempts              Attempt[]
+  classrooms            QuizClassroom[]
   createdAt             DateTime   @default(now())
+}
+
+model QuizClassroom {
+  id           Int    @id @default(autoincrement())
+  quizId       Int
+  quiz         Quiz   @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  courseId     String
+  courseWorkId String
+  courseName   String @default("")
+
+  @@unique([quizId, courseId])
 }
 
 model Question {

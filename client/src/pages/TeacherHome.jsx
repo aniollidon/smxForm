@@ -108,7 +108,7 @@ export default function TeacherHome() {
           <div>
             <Link to={`/t/quiz/${q.id}`}><b>{q.title}</b></Link>{' '}
             <span className="badge">{q.published ? 'Publicada' : 'Esborrany'}</span>
-            <div className="muted">{q._count.questions} preguntes · {q._count.attempts} intents{q.classroomCourseWorkId && ' · Classroom'}</div>
+            <div className="muted">{q._count.questions} preguntes · {q._count.attempts} intents{q.classrooms?.length > 0 && ` · Classroom (${q.classrooms.length})`}</div>
             {q.gradingStatus?.needsRegrade > 0 && <p className="grade-warning">Hi ha {q.gradingStatus.needsRegrade} intents corregits amb una versió anterior de les preguntes.</p>}
             {q.gradingStatus?.pendingReview > 0 && <p className="grade-warning">Hi ha {q.gradingStatus.pendingReview} intents pendents de revisió manual.</p>}
             {q.gradingStatus?.classroomUpdates > 0 && <p className="grade-warning">Les notes exportades a Classroom han canviat per a {q.gradingStatus.classroomUpdates} alumnes.</p>}
@@ -117,7 +117,7 @@ export default function TeacherHome() {
           <div className="row">
             <Link to={`/t/quiz/${q.id}/attempts`}>Intents</Link>
             {q.gradingStatus?.needsRegrade > 0 && <button disabled={gradeAction?.id === q.id} onClick={() => runGradeAction(q, 'regrade')}>{gradeAction?.id === q.id && gradeAction.action === 'regrade' ? 'Reavaluant…' : 'Reavalua intents'}</button>}
-            {q.gradingStatus?.classroomUpdates > 0 && q.classroomCourseWorkId && <button className="secondary" disabled={gradeAction?.id === q.id || q.gradingStatus?.needsRegrade > 0 || q.gradingStatus?.pendingReview > 0} onClick={() => runGradeAction(q, 'classroom')}>{gradeAction?.id === q.id && gradeAction.action === 'classroom' ? 'Actualitzant…' : 'Actualitza Classroom'}</button>}
+            {q.gradingStatus?.classroomUpdates > 0 && q.classrooms?.length > 0 && <button className="secondary" disabled={gradeAction?.id === q.id || q.gradingStatus?.needsRegrade > 0 || q.gradingStatus?.pendingReview > 0} onClick={() => runGradeAction(q, 'classroom')}>{gradeAction?.id === q.id && gradeAction.action === 'classroom' ? 'Actualitzant…' : 'Actualitza Classroom'}</button>}
             <button className="secondary" onClick={() => dup.mutate(q.id)}>Duplica</button>
             <button className="danger" onClick={() => confirm('Esborrar l\'entrega i tots els intents?') && del.mutate(q.id)}>Esborra</button>
           </div>

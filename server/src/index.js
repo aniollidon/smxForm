@@ -23,7 +23,7 @@ async function seedTeachers() {
 const app = express();
 const prod = process.env.NODE_ENV === 'production';
 if (prod) app.set('trust proxy', 1);
-if (prod && (process.env.SESSION_SECRET || 'canvia-aixo') === 'canvia-aixo') {
+if (prod && (process.env.SESSION_SECRET || 'un-secret-molt-ben-guardat') === 'un-secret-molt-ben-guardat') {
   throw new Error('Defineix SESSION_SECRET en producció');
 }
 
@@ -31,8 +31,8 @@ app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: { poli
 app.use(express.json({ limit: '200kb' }));
 app.use(
   cookieSession({
-    name: 'smx',
-    keys: [process.env.SESSION_SECRET || 'canvia-aixo'],
+    name: 'palamForm',
+    keys: [process.env.SESSION_SECRET || 'un-secret-molt-ben-guardat'],
     maxAge: 8 * 3600 * 1000,
     sameSite: 'lax',
     httpOnly: true,

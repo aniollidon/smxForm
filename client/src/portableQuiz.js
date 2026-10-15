@@ -1,6 +1,6 @@
 import { uid, validateDraft } from './questionModel.js';
 
-export const PORTABLE_FORMAT = 'smxform.quiz';
+export const PORTABLE_FORMAT = 'palamForm.quiz';
 export const PORTABLE_VERSION = 1;
 
 export function dataUriToFile(dataUri) {
@@ -48,6 +48,10 @@ export function exportQuestion(question, image = null) {
         pairs: config.left.map((item) => ({ left: item.text, right: rightById.get(answer.pairs?.[item.id]) })),
         distractors: config.right.filter((item) => !used.has(item.id)).map((item) => item.text),
       };
+    }
+    case 'ORDERING': {
+      const itemsById = new Map(config.items.map((item) => [item.id, item.text]));
+      return { ...common, items: (answer.order || []).map((id) => itemsById.get(id)) };
     }
     case 'IMAGE_LABEL': {
       const correctLabels = new Set(Object.values(answer.labels || {}));
@@ -106,7 +110,7 @@ export function importQuestionToDraft(question) {
     image: question.image || null,
     points: question.points ?? 1,
     required: question.required ?? true,
-    shuffleOptions: question.shuffleOptions ?? ['MCQ', 'MATCHING', 'IMAGE_LABEL'].includes(question.type),
+    shuffleOptions: question.shuffleOptions ?? ['MCQ', 'MATCHING', 'ORDERING', 'IMAGE_LABEL'].includes(question.type),
   };
   let draft;
   switch (question.type) {
@@ -129,6 +133,11 @@ export function importQuestionToDraft(question) {
       draft = { ...base, pairs: (question.pairs || []).map((pair) => ({ left: pair.left, right: pair.right })), distractors: (question.distractors || []).join('\n') };
       break;
     }
+    case 'ORDERING':
+      requireValue(Array.isArray(question.items) && question.items.length >= 2 && question.items.length <= 30, 'ORDERING: «items» ha de tenir entre 2 i 30 elements.');
+      requireValue(question.items.every((item) => typeof item === 'string' && item.trim() && item.length <= 500), 'ORDERING: cada element ha de ser una cadena de text no buida de fins a 500 caràcters.');
+      draft = { ...base, items: question.items.map((text) => ({ id: uid(), text })) };
+      break;
     case 'IMAGE_LABEL':
       requireValue(typeof question.image === 'string', 'IMAGE_LABEL: cal incloure «image» amb una imatge data URI.');
       requireValue(Array.isArray(question.markers) && question.markers.length >= 1 && question.markers.length <= 30, 'IMAGE_LABEL: «markers» ha de tenir entre 1 i 30 punts.');

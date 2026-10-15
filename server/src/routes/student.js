@@ -31,6 +31,7 @@ function studentQuestion(q, seed) {
     const s = seed + q.id * 31;
     if (config.options) config.options = shuffle(config.options, s);
     if (config.right) config.right = shuffle(config.right, s);
+    if (config.items) config.items = shuffle(config.items, s);
     if (config.labels) config.labels = shuffle(config.labels, s);
   }
   const { answerKey, ...rest } = q;

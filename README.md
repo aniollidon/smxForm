@@ -1,4 +1,4 @@
-# smxForm
+# palamForm
 
 Plataforma d'entregues (quizzes) autocorregibles amb integració amb Google Classroom.
 
