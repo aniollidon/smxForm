@@ -97,6 +97,9 @@ p { line-height: 1.65; }
 .take-quiz-header h2 { min-width: 0; margin: 0; overflow-wrap: anywhere; }
 .take-quiz-save-state { margin: 0; color: #a7a7a7; font-size: 12px; }
 .take-quiz-save-state.is-error { color: #ff858d; }
+.take-quiz-question-prompt { -webkit-user-select: none; user-select: none; }
+.question-input-field { min-width: 0; flex: 1 1 auto; }
+.paste-blocked-message { display: block; margin-top: 6px; color: #f0c978; font-size: 12px; }
 .take-quiz-finish { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-top: 24px; padding: 20px 22px; border: 1px solid #3b3b3b; border-left: 3px solid var(--blue); border-radius: 3px; background: #242424; }
 .take-quiz-finish-copy h3 { margin: 0 0 5px; font-size: 16px; }
 .take-quiz-finish-copy p { margin: 0; }
@@ -173,6 +176,19 @@ code { padding: 2px 5px; border: 1px solid #414141; border-radius: 2px; backgrou
 .format-menu summary:hover { border-color: #6a6a6a; background: #414141; }
 .format-menu-popover { position: absolute; z-index: 5; top: calc(100% + 6px); right: 0; min-width: 205px; padding: 6px; border: 1px solid #505050; border-radius: 3px; background: #262626; box-shadow: 0 10px 24px rgba(0,0,0,.35); }
 .format-menu-popover a { display: block; padding: 10px 11px; color: #f2f0ed; font-size: 13px; text-decoration: none; }
+.row-menu { position: relative; display: inline-block; vertical-align: middle; }
+.row-menu summary { padding: 0 8px; border-radius: 3px; color: #f2f0ed; cursor: pointer; list-style: none; font-size: 18px; }
+.row-menu summary::-webkit-details-marker { display: none; }
+.row-menu summary:hover { background: #414141; }
+.row-menu-popover { position: absolute; z-index: 5; top: 100%; right: 0; padding: 6px; border: 1px solid #505050; border-radius: 3px; background: #262626; box-shadow: 0 10px 24px rgba(0,0,0,.35); white-space: nowrap; }
+.row-menu-popover button { display: block; width: 100%; padding: 10px 11px; border: 0; background: transparent; color: #f2f0ed; font-size: 13px; text-align: left; cursor: pointer; }
+.row-menu-popover button:hover, .row-menu-popover button:focus-visible { background: #353535; }
+.modal-backdrop { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: rgba(0,0,0,.6); }
+.modal { width: min(440px, calc(100vw - 32px)); padding: 22px; border: 1px solid #505050; border-radius: 4px; background: #262626; box-shadow: 0 18px 40px rgba(0,0,0,.5); }
+.modal h3 { margin: 0 0 10px; }
+.modal p { margin: 0 0 20px; color: #d6d3cf; line-height: 1.5; }
+.modal-message { margin-bottom: 20px; color: #d6d3cf; line-height: 1.5; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
 .format-menu-popover a:hover, .format-menu-popover a:focus-visible { background: #353535; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; clip-path: inset(50%); }
 .format-docs { min-height: 100vh; background: #f1efe8; color: #242520; font-family: Georgia, 'Times New Roman', serif; }

@@ -28,6 +28,7 @@ export function exportQuestion(question, image = null) {
     points: question.points,
     required: question.required,
     shuffleOptions: question.shuffleOptions,
+    allowClipboard: !!question.config?.allowClipboard,
     ...(image ? { image } : {}),
   };
   const config = question.config || {};
@@ -111,7 +112,9 @@ export function importQuestionToDraft(question) {
     points: question.points ?? 1,
     required: question.required ?? true,
     shuffleOptions: question.shuffleOptions ?? ['MCQ', 'MATCHING', 'ORDERING', 'IMAGE_LABEL'].includes(question.type),
+    allowClipboard: question.allowClipboard ?? false,
   };
+  requireValue(typeof base.allowClipboard === 'boolean', '«allowClipboard» ha de ser boolean.');
   let draft;
   switch (question.type) {
     case 'MCQ':

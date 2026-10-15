@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, fileUrl } from '../api';
 import QuestionInput, { ImageWithPoints } from '../components/QuestionInput.jsx';
 import { formatGrade } from '../formatGrade.js';
+import { usePrompt } from '../components/PromptProvider.jsx';
 
 function AnswerBlock({ label, children, tone }) {
   return (
@@ -160,12 +161,14 @@ function Result({ result }) {
 
 export default function TakeQuiz() {
   const { id } = useParams();
+  const { confirm } = usePrompt();
   const qc = useQueryClient();
   const { data, isLoading, error } = useQuery({ queryKey: ['attempt', id], queryFn: () => api(`/api/student/attempts/${id}`) });
   const [answers, setAnswers] = useState({});
   const [missing, setMissing] = useState([]);
   const [msg, setMsg] = useState('');
   const [saveState, setSaveState] = useState('');
+  const [pasteBlocked, setPasteBlocked] = useState(null);
   const timers = useRef({});
   const latest = useRef({});
 
@@ -191,13 +194,14 @@ export default function TakeQuiz() {
   const change = (qid, value) => {
     setAnswers((a) => ({ ...a, [qid]: { ...a[qid], value } }));
     latest.current[qid] = value;
+    setPasteBlocked((current) => current?.questionId === qid ? null : current);
     setSaveState('Desant…');
     clearTimeout(timers.current[qid]);
     timers.current[qid] = setTimeout(() => save(qid).catch(() => {}), 600);
   };
 
   const submit = async () => {
-    if (!confirm('Vols enviar l\'entrega? No podràs canviar les respostes.')) return;
+    if (!await confirm('No podràs canviar les respostes després d’enviar.', { title: 'Vols enviar l’entrega?', confirmLabel: 'Envia l’entrega' })) return;
     setMsg('');
     try {
       await Promise.all(Object.keys(timers.current).map((qid) => save(qid)));
@@ -229,8 +233,19 @@ export default function TakeQuiz() {
         </p>
       </header>
       {data.questions.map((q, i) => (
-        <div className="card stack" key={q.id} style={missing.includes(q.id) ? { outline: '2px solid #dc2626' } : undefined}>
-          <div><b>{i + 1}. {q.text}</b> {q.required && <span className="error">*</span>} <span className="muted">({formatGrade(q.points)} pt)</span></div>
+        <div
+          className="card stack"
+          key={q.id}
+          style={missing.includes(q.id) ? { outline: '2px solid #dc2626' } : undefined}
+          onCopy={q.config?.allowClipboard ? undefined : (event) => event.preventDefault()}
+          onCut={q.config?.allowClipboard ? undefined : (event) => event.preventDefault()}
+        >
+          <div
+            className={q.config?.allowClipboard ? undefined : 'take-quiz-question-prompt'}
+            onContextMenu={q.config?.allowClipboard ? undefined : (event) => event.preventDefault()}
+          >
+            <b>{i + 1}. {q.text}</b> {q.required && <span className="error">*</span>} <span className="muted">({formatGrade(q.points)} pt)</span>
+          </div>
           {q.type !== 'IMAGE_LABEL' && q.imageUrl && <img src={`/api/files/${q.imageUrl}`} alt="" style={{ maxWidth: '100%' }} />}
           <div className="question-response">
             <QuestionInput
@@ -238,6 +253,8 @@ export default function TakeQuiz() {
               attemptId={data.id}
               value={answers[q.id]?.value}
               fileName={answers[q.id]?.fileUrl}
+              pasteBlockedField={pasteBlocked?.questionId === q.id ? pasteBlocked.field : null}
+              onPasteBlocked={(field) => setPasteBlocked({ questionId: q.id, field })}
               onChange={(v) => change(q.id, v)}
               onFile={(f) => setAnswers((a) => ({ ...a, [q.id]: { value: 'file', fileUrl: f } }))}
             />

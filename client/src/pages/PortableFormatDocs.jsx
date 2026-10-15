@@ -89,6 +89,7 @@ export default function PortableFormatDocs() {
           <Field name="points">Nombre entre 0 i 1000; per defecte <code>1</code>.</Field>
           <Field name="required">Booleà. Si és true, l’alumne l’ha de respondre per enviar; per defecte <code>true</code>.</Field>
           <Field name="shuffleOptions">Booleà. Barreja les opcions que admeten ordre aleatori; per defecte <code>true</code> als tipus compatibles, <code>false</code> a la resta.</Field>
+          <Field name="allowClipboard">Booleà. Permet copiar i enganxar en aquesta pregunta; per defecte <code>false</code>.</Field>
           <Field name="image">Opcional per als tipus excepte <code>IMAGE_LABEL</code>, on és obligatori. Data URI base64 d’una imatge PNG, JPEG, WebP o GIF: <code>data:image/png;base64,...</code>. Màxim 5 MiB descodificats. L’importador comprova el tipus real del fitxer. Per a preguntes amb imatge d’etiquetatge, els punts són coordenades percentuals respecte a la imatge.</Field>
         </tbody></table></div>
 

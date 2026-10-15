@@ -16,19 +16,21 @@ const fail = (status, msg) => Object.assign(new Error(msg), { status });
 const TYPES = ['MCQ', 'TRUE_FALSE', 'MATCHING', 'ORDERING', 'IMAGE_LABEL', 'SHORT_TEXT', 'LONG_TEXT', 'IMAGE_UPLOAD'];
 const id = z.union([z.string(), z.number()]).transform(String);
 const item = z.object({ id, text: z.string().max(500) });
+const clipboardConfig = { allowClipboard: z.boolean().default(false) };
 
 const configSchemas = {
-  MCQ: z.object({ options: z.array(item).min(2).max(12), multiple: z.boolean().default(false) }),
-  TRUE_FALSE: z.object({}).passthrough(),
-  MATCHING: z.object({ left: z.array(item).min(2).max(12), right: z.array(item).min(2).max(15) }),
-  ORDERING: z.object({ items: z.array(item.extend({ text: z.string().trim().min(1).max(500) })).min(2).max(30) }),
+  MCQ: z.object({ options: z.array(item).min(2).max(12), multiple: z.boolean().default(false), ...clipboardConfig }),
+  TRUE_FALSE: z.object(clipboardConfig).passthrough(),
+  MATCHING: z.object({ left: z.array(item).min(2).max(12), right: z.array(item).min(2).max(15), ...clipboardConfig }),
+  ORDERING: z.object({ items: z.array(item.extend({ text: z.string().trim().min(1).max(500) })).min(2).max(30), ...clipboardConfig }),
   IMAGE_LABEL: z.object({
     points: z.array(z.object({ id, x: z.number().min(0).max(100), y: z.number().min(0).max(100) })).min(1).max(30),
     labels: z.array(z.string().max(100)).nullable().default(null),
+    ...clipboardConfig,
   }),
-  SHORT_TEXT: z.object({}).passthrough(),
-  LONG_TEXT: z.object({}).passthrough(),
-  IMAGE_UPLOAD: z.object({}).passthrough(),
+  SHORT_TEXT: z.object(clipboardConfig).passthrough(),
+  LONG_TEXT: z.object(clipboardConfig).passthrough(),
+  IMAGE_UPLOAD: z.object(clipboardConfig).passthrough(),
 };
 const keySchemas = {
   MCQ: z.object({ correct: z.array(id).min(1), allOrNothing: z.boolean().optional() }),
@@ -283,6 +285,13 @@ router.get('/attempts/:aid', wrap(async (req, res) => {
     ...a,
     answers: a.answers.map((x) => ({ ...x, value: JSON.parse(x.value), question: present(x.question) })),
   });
+}));
+
+router.delete('/attempts/:aid', wrap(async (req, res) => {
+  const a = await prisma.attempt.findUnique({ where: { id: Number(req.params.aid) }, include: { quiz: true } });
+  if (!a || a.quiz.teacherId !== req.user.id) throw fail(404, 'Intent no trobat');
+  await prisma.attempt.delete({ where: { id: a.id } });
+  res.json({ ok: true });
 }));
 
 router.get('/questions/:qid/answers', wrap(async (req, res) => {

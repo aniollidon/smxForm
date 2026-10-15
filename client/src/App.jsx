@@ -13,6 +13,7 @@ import QuestionReview from './pages/QuestionReview.jsx';
 import PortableFormatDocs from './pages/PortableFormatDocs.jsx';
 import QuizPreview from './pages/QuizPreview.jsx';
 import ArchitectureArt from './components/ArchitectureArt.jsx';
+import { PromptProvider } from './components/PromptProvider.jsx';
 
 function Login() {
   const next = new URLSearchParams(useLocation().search).get('next') || '/';
@@ -92,6 +93,7 @@ function Home() {
 
 export default function App() {
   return (
+    <PromptProvider>
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/format" element={<PortableFormatDocs />} />
@@ -107,5 +109,6 @@ export default function App() {
       <Route path="/t/attempt/:id" element={<Protected teacher><AttemptReview /></Protected>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </PromptProvider>
   );
 }

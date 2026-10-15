@@ -8,6 +8,7 @@ import FormatMenu from '../components/FormatMenu.jsx';
 import { TYPE_LABELS, emptyDraft, fromQuestion } from '../questionModel';
 import { blobToDataUri, exportQuiz } from '../portableQuiz.js';
 import { formatGrade } from '../formatGrade.js';
+import { usePrompt } from '../components/PromptProvider.jsx';
 
 const toLocal = (iso) => (iso ? new Date(new Date(iso) - new Date(iso).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '');
 
@@ -151,6 +152,7 @@ function ClassroomPanel({ quiz, onSaved }) {
 
 export default function QuizEditor() {
   const { id } = useParams();
+  const { confirm } = usePrompt();
   const qc = useQueryClient();
   const { data: quiz, isLoading, error } = useQuery({ queryKey: ['quiz-edit', id], queryFn: () => api(`/api/teacher/quizzes/${id}`) });
   const [editing, setEditing] = useState(null); // draft o null
@@ -174,7 +176,7 @@ export default function QuizEditor() {
     refresh();
   };
   const del = async (qid) => {
-    if (!confirm('Esborrar la pregunta?')) return;
+    if (!await confirm('Aquesta pregunta i les respostes associades s’esborraran.', { title: 'Esborrar la pregunta?', confirmLabel: 'Esborra', danger: true })) return;
     await api(`/api/teacher/questions/${qid}`, { method: 'DELETE' });
     refresh();
   };

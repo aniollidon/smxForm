@@ -44,6 +44,7 @@ export default function QuestionEditor({ initial, onSave, onCancel }) {
       <div className="row">
         <label>Punts <input type="number" min="0" step="0.25" value={d.points} onChange={(e) => set({ points: e.target.value })} /></label>
         <label><input type="checkbox" checked={d.required} onChange={(e) => set({ required: e.target.checked })} /> Obligatòria</label>
+        <label><input type="checkbox" checked={d.allowClipboard} onChange={(e) => set({ allowClipboard: e.target.checked })} /> Permet copiar i enganxar en aquesta pregunta</label>
         {['MCQ', 'MATCHING', 'ORDERING', 'IMAGE_LABEL'].includes(d.type) && (
           <label><input type="checkbox" checked={d.shuffleOptions} onChange={(e) => set({ shuffleOptions: e.target.checked })} /> Respostes en ordre aleatori</label>
         )}

@@ -7,8 +7,10 @@ import { dataUriToFile, parsePortableQuiz } from '../portableQuiz.js';
 import { toPayload } from '../questionModel.js';
 import WorkspaceHero from '../components/WorkspaceHero.jsx';
 import FormatMenu from '../components/FormatMenu.jsx';
+import { usePrompt } from '../components/PromptProvider.jsx';
 
 export default function TeacherHome() {
+  const { confirm } = usePrompt();
   const qc = useQueryClient();
   const nav = useNavigate();
   const [title, setTitle] = useState('');
@@ -45,6 +47,15 @@ export default function TeacherHome() {
     } finally {
       setGradeAction(null);
     }
+  };
+
+  const deleteQuiz = async (quiz) => {
+    const accepted = await confirm('S’esborraran l’entrega i tots els intents. Aquesta acció no es pot desfer.', {
+      title: `Esborrar «${quiz.title}»?`,
+      confirmLabel: 'Esborra',
+      danger: true,
+    });
+    if (accepted) del.mutate(quiz.id);
   };
 
   const importQuiz = async (file) => {
@@ -120,7 +131,7 @@ export default function TeacherHome() {
             {q.gradingStatus?.needsRegrade > 0 && <button disabled={gradeAction?.id === q.id} onClick={() => runGradeAction(q, 'regrade')}>{gradeAction?.id === q.id && gradeAction.action === 'regrade' ? 'Reavaluant…' : 'Reavalua intents'}</button>}
             {q.gradingStatus?.classroomUpdates > 0 && q.classrooms?.length > 0 && <button className="secondary" disabled={gradeAction?.id === q.id || q.gradingStatus?.needsRegrade > 0 || q.gradingStatus?.pendingReview > 0} onClick={() => runGradeAction(q, 'classroom')}>{gradeAction?.id === q.id && gradeAction.action === 'classroom' ? 'Actualitzant…' : 'Actualitza Classroom'}</button>}
             <button className="secondary" onClick={() => dup.mutate(q.id)}>Duplica</button>
-            <button className="danger" onClick={() => confirm('Esborrar l\'entrega i tots els intents?') && del.mutate(q.id)}>Esborra</button>
+            <button className="danger" onClick={() => deleteQuiz(q)}>Esborra</button>
           </div>
         </div>
       ))}

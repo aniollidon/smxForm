@@ -1,5 +1,6 @@
 import React from 'react';
 import { fileUrl, upload } from '../api';
+import { usePrompt } from './PromptProvider.jsx';
 
 export function ImageWithPoints({ src, points = [], onClick }) {
   return (
@@ -12,8 +13,31 @@ export function ImageWithPoints({ src, points = [], onClick }) {
   );
 }
 
-export default function QuestionInput({ q, value, onChange, attemptId, fileName, onFile, disabled }) {
+export default function QuestionInput({ q, value, onChange, attemptId, fileName, onFile, disabled, pasteBlockedField, onPasteBlocked }) {
   const c = q.config;
+  const { alert } = usePrompt();
+  const onPaste = (field) => (event) => {
+    if (disabled || c.allowClipboard) return;
+    event.preventDefault();
+    onPasteBlocked?.(field);
+  };
+  const onBeforeInput = (field) => (event) => {
+    if (disabled || c.allowClipboard || event.nativeEvent?.inputType !== 'insertFromPaste') return;
+    event.preventDefault();
+    onPasteBlocked?.(field);
+  };
+  const onTextChange = (field, previousValue, update) => (event) => {
+    if (!disabled && !c.allowClipboard && event.nativeEvent?.inputType === 'insertFromPaste') {
+      event.preventDefault();
+      event.currentTarget.value = previousValue ?? '';
+      onPasteBlocked?.(field);
+      return;
+    }
+    update(event.currentTarget.value);
+  };
+  const pasteWarning = (field) => pasteBlockedField === field && (
+    <span className="paste-blocked-message" role="status">Enganxar no està permès en aquesta pregunta.</span>
+  );
   switch (q.type) {
     case 'MCQ': {
       const sel = value || [];
@@ -99,7 +123,10 @@ export default function QuestionInput({ q, value, onChange, attemptId, fileName,
                   {c.labels.map((l) => <option key={l} value={l}>{l}</option>)}
                 </select>
               ) : (
-                <input type="text" disabled={disabled} value={v[p.id] ?? ''} onChange={(e) => onChange({ ...v, [p.id]: e.target.value })} />
+                <div className="question-input-field">
+                  <input type="text" disabled={disabled} value={v[p.id] ?? ''} onPaste={onPaste(p.id)} onBeforeInput={onBeforeInput(p.id)} onChange={onTextChange(p.id, v[p.id], (text) => onChange({ ...v, [p.id]: text }))} />
+                  {pasteWarning(p.id)}
+                </div>
               )}
             </div>
           ))}
@@ -107,9 +134,19 @@ export default function QuestionInput({ q, value, onChange, attemptId, fileName,
       );
     }
     case 'SHORT_TEXT':
-      return <input type="text" maxLength={500} disabled={disabled} value={value ?? ''} onChange={(e) => onChange(e.target.value)} />;
+      return (
+        <div className="question-input-field">
+          <input type="text" maxLength={500} disabled={disabled} value={value ?? ''} onPaste={onPaste('answer')} onBeforeInput={onBeforeInput('answer')} onChange={onTextChange('answer', value, onChange)} />
+          {pasteWarning('answer')}
+        </div>
+      );
     case 'LONG_TEXT':
-      return <textarea maxLength={10000} disabled={disabled} value={value ?? ''} onChange={(e) => onChange(e.target.value)} />;
+      return (
+        <div className="question-input-field">
+          <textarea maxLength={10000} disabled={disabled} value={value ?? ''} onPaste={onPaste('answer')} onBeforeInput={onBeforeInput('answer')} onChange={onTextChange('answer', value, onChange)} />
+          {pasteWarning('answer')}
+        </div>
+      );
     case 'IMAGE_UPLOAD':
       return (
         <div className="stack">
@@ -125,7 +162,7 @@ export default function QuestionInput({ q, value, onChange, attemptId, fileName,
                 const r = await upload(`/api/files/answer-image/${attemptId}/${q.id}`, f);
                 onFile(r.fileUrl);
               } catch (err) {
-                alert(err.message);
+                await alert(err.message, { title: 'No s’ha pogut pujar la imatge' });
               }
             }}
           />

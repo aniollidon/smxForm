@@ -15,7 +15,7 @@ export const TYPE_LABELS = {
 const lines = (s) => s.split('\n').map((x) => x.trim()).filter(Boolean);
 
 export function emptyDraft(type) {
-  const base = { type, text: '', imageUrl: null, points: 1, required: true, shuffleOptions: ['MCQ', 'MATCHING', 'ORDERING', 'IMAGE_LABEL'].includes(type) };
+  const base = { type, text: '', imageUrl: null, points: 1, required: true, shuffleOptions: ['MCQ', 'MATCHING', 'ORDERING', 'IMAGE_LABEL'].includes(type), allowClipboard: false };
   switch (type) {
     case 'MCQ':
       return { ...base, multiple: false, opts: [{ id: uid(), text: '', correct: true }, { id: uid(), text: '', correct: false }] };
@@ -38,7 +38,7 @@ export function emptyDraft(type) {
 
 export function fromQuestion(q) {
   const { type, config: c, answerKey: k } = q;
-  const base = { id: q.id, type, text: q.text, imageUrl: q.imageUrl, points: q.points, required: q.required, shuffleOptions: q.shuffleOptions };
+  const base = { id: q.id, type, text: q.text, imageUrl: q.imageUrl, points: q.points, required: q.required, shuffleOptions: q.shuffleOptions, allowClipboard: !!c.allowClipboard };
   switch (type) {
     case 'MCQ':
       return { ...base, multiple: c.multiple, opts: c.options.map((o) => ({ ...o, correct: k.correct.includes(o.id) })) };
@@ -111,6 +111,7 @@ export function toPayload(d) {
       p.answerKey = { reference: d.reference };
       break;
   }
+  p.config.allowClipboard = !!d.allowClipboard;
   return p;
 }
 
