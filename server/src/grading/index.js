@@ -60,6 +60,10 @@ function gradeQuestion(question, value) {
       const ok = ids.filter((l) => String(value[l]) === String(pairs[l])).length;
       const bad = ids.filter((l) => value[l] != null && value[l] !== '' && String(value[l]) !== String(pairs[l])).length;
       fraction = Math.max(0, (ok - bad) / ids.length);
+      if (key.allOrNothing) {
+        const hasExtraPair = Object.keys(value).some((leftId) => !ids.includes(leftId));
+        fraction = ok === ids.length && bad === 0 && !hasExtraPair ? 1 : 0;
+      }
       break;
     }
     case 'ORDERING': {
@@ -67,6 +71,7 @@ function gradeQuestion(question, value) {
       if (!order.length || !Array.isArray(value)) break;
       const correct = order.filter((id, index) => String(value[index]) === String(id)).length;
       fraction = correct / order.length;
+      if (key.allOrNothing) fraction = value.length === order.length && correct === order.length ? 1 : 0;
       break;
     }
     case 'IMAGE_LABEL': {
@@ -101,7 +106,7 @@ function scoreQuestion(question, value, negativePenalty = 0) {
   if (g.manual) return { manual: true, answered: g.answered, score: null };
   if (!g.answered) return { answered: false, score: 0 };
   if (g.fraction > 0) return { answered: true, score: question.points * g.fraction };
-  return { answered: true, score: -negativePenalty * question.points };
+  return { answered: true, score: negativePenalty ? -negativePenalty * question.points : 0 };
 }
 
 // answers: [{questionId, score|null}]; retorna { score, pending }

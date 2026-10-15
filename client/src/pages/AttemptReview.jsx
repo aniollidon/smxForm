@@ -74,7 +74,7 @@ export default function AttemptReview() {
         </div>
         <div className="review-metrics">
           <div className="review-metric"><span>ESTAT</span><b>{status}</b></div>
-          <div className="review-metric review-total-score"><span>NOTA</span><b>{formatGrade(data.score)} <i>/ {formatGrade(data.quiz.maxScore)}</i></b></div>
+          <div className={`review-metric review-total-score${data.score != null && data.score <= 0 ? ' is-negative' : ''}`}><span>NOTA</span><b>{formatGrade(data.score)} <i>/ {formatGrade(data.quiz.maxScore)}</i></b></div>
           <div className="review-metric"><span>PREGUNTES</span><b>{answers.length}</b></div>
         </div>
         {pendingCount > 0 && <p className="review-pending-note">{pendingCount} respostes manuals pendents en aquest intent</p>}
@@ -84,10 +84,10 @@ export default function AttemptReview() {
         <span className="panel-index">{answers.length} PREGUNTES</span>
       </div>
       {answers.map((a, index) => (
-        <article className="card review-question" key={a.id}>
+        <article className={`card review-question${a.needsReview ? ' is-pending' : ''}`} key={a.id}>
           <div className="review-question-heading">
             <div className="review-question-title"><span className="review-question-number">{String(index + 1).padStart(2, '0')}</span><h3>{a.question.text}</h3></div>
-            <span className={`review-score${a.needsReview ? ' is-pending' : ''}`}>{a.score == null ? 'Pendent' : formatGrade(a.score)} <i>/ {formatGrade(a.question.points)}</i></span>
+            <span className={`review-score${a.needsReview ? ' is-pending' : a.score != null && a.score <= 0 ? ' is-negative' : ''}`}>{a.score == null ? 'Pendent' : formatGrade(a.score)} <i>/ {formatGrade(a.question.points)}</i></span>
           </div>
           <div className="review-answer"><Value a={a} /></div>
           {manual(a) && a.question.answerKey.reference && <p className="review-reference"><span>REFERÈNCIA</span>{a.question.answerKey.reference}</p>}

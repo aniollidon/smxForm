@@ -10,6 +10,8 @@ test('MCQ parcial i penalització', () => {
   assert.strictEqual(scoreQuestion(m, ['a']).score, 1);
   assert.strictEqual(scoreQuestion(m, ['c'], 0.5).score, -1);
   assert.strictEqual(scoreQuestion(m, [], 0.5).score, 0);
+  assert.strictEqual(scoreQuestion(q('MCQ', { correct: ['a', 'b'], allOrNothing: true }), ['a'], 0.5).score, -1);
+  assert.strictEqual(scoreQuestion(q('MCQ', { correct: ['a', 'b'], allOrNothing: true }), ['a', 'b']).score, 2);
 });
 
 test('TRUE_FALSE', () => {
@@ -22,6 +24,11 @@ test('MATCHING', () => {
   const m = q('MATCHING', { pairs: { 1: 'x', 2: 'y' } });
   assert.strictEqual(scoreQuestion(m, { 1: 'x', 2: 'y' }).score, 2);
   assert.strictEqual(scoreQuestion(m, { 1: 'x' }).score, 1);
+  const strict = q('MATCHING', { pairs: { 1: 'x', 2: 'y' }, allOrNothing: true });
+  assert.strictEqual(scoreQuestion(strict, { 1: 'x', 2: 'y' }).score, 2);
+  assert.strictEqual(scoreQuestion(strict, { 1: 'x' }).score, 0);
+  assert.strictEqual(scoreQuestion(strict, { 1: 'x', 2: 'y', extra: 'z' }).score, 0);
+  assert.strictEqual(scoreQuestion(strict, { 1: 'x', 2: 'wrong' }, 0.25).score, -0.5);
 });
 
 test('ORDERING dona puntuació parcial pels elements ben posicionats', () => {
@@ -29,6 +36,9 @@ test('ORDERING dona puntuació parcial pels elements ben posicionats', () => {
   assert.strictEqual(scoreQuestion(ordering, ['a', 'b', 'c', 'd']).score, 2);
   assert.strictEqual(scoreQuestion(ordering, ['b', 'a', 'c', 'd']).score, 1);
   assert.strictEqual(scoreQuestion(ordering, ['a']).score, 0.5);
+  const strict = q('ORDERING', { order: ['a', 'b', 'c', 'd'], allOrNothing: true });
+  assert.strictEqual(scoreQuestion(strict, ['a', 'b', 'c', 'd']).score, 2);
+  assert.strictEqual(scoreQuestion(strict, ['a', 'b', 'd', 'c']).score, 0);
 });
 
 test('IMAGE_LABEL i SHORT_TEXT normalitzats', () => {

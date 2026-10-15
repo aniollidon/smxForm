@@ -64,6 +64,7 @@ model Question {
   shuffleOptions Boolean  @default(true)
   order          Int      @default(0)
   gradingVersion Int     @default(0)
+  gradingCriteria String?
   config         String   @default("{}") // JSON visible a l'alumne
   answerKey      String   @default("{}") // JSON només professor
   answers        Answer[]
@@ -96,6 +97,8 @@ model Answer {
   fileUrl     String?
   score       Float?
   needsReview Boolean  @default(false)
+  manuallyReviewed Boolean @default(false)
+  llmReviewed Boolean @default(false)
   feedback    String?
   questionGradingVersion Int @default(0)
 

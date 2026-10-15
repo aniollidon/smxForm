@@ -142,7 +142,7 @@ function QuestionResult({ q }) {
         <span className={`result-score result-${scoreTone}`}>{formatGrade(q.score)} / {formatGrade(q.points)} · {status}</span>
       </div>
       {answers}
-      {q.feedback && <div className="result-feedback"><strong>Comentari del professorat</strong><p>{q.feedback}</p></div>}
+      {q.feedback && <div className="result-feedback"><strong>Comentari de correcció</strong><p>{q.feedback}</p></div>}
     </div>
   );
 }

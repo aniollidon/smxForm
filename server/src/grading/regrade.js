@@ -16,15 +16,32 @@ function regradeAttempt(quiz, questions, answers) {
     const answerKey = parseJson(question.answerKey);
     const gradingValue = question.type === 'IMAGE_UPLOAD' ? !!existing.fileUrl : value;
     const result = scoreQuestion({ ...question, answerKey }, gradingValue, quiz.negativePenalty);
+    const reviewedShortTextUnchanged = question.type === 'SHORT_TEXT'
+      && existing.manuallyReviewed
+      && existing.questionGradingVersion === question.gradingVersion;
     const manualAnswerUnchanged = result.manual
       && existing.questionGradingVersion === question.gradingVersion
       && existing.score != null
       && !existing.needsReview;
-    const data = result.manual
+    const llmAnswerUnchanged = existing.llmReviewed
+      && existing.questionGradingVersion === question.gradingVersion
+      && existing.score != null
+      && !existing.needsReview;
+    const data = llmAnswerUnchanged
+      ? { score: existing.score, needsReview: false, questionGradingVersion: question.gradingVersion, llmReviewed: true }
+      : reviewedShortTextUnchanged
+      ? { score: existing.score, needsReview: false, questionGradingVersion: question.gradingVersion, manuallyReviewed: true }
+      : result.manual
       ? manualAnswerUnchanged
-        ? { score: existing.score, needsReview: false, questionGradingVersion: question.gradingVersion }
-        : { score: result.answered ? null : 0, needsReview: result.answered, questionGradingVersion: question.gradingVersion }
-      : { score: result.score === 0 ? 0 : result.score, needsReview: false, questionGradingVersion: question.gradingVersion };
+          ? { score: existing.score, needsReview: false, questionGradingVersion: question.gradingVersion, ...(existing.llmReviewed ? { llmReviewed: false } : {}) }
+          : { score: result.answered ? null : 0, needsReview: result.answered, questionGradingVersion: question.gradingVersion, ...(existing.llmReviewed ? { llmReviewed: false } : {}) }
+      : {
+        score: result.score === 0 ? 0 : result.score,
+        needsReview: false,
+        questionGradingVersion: question.gradingVersion,
+        ...(question.type === 'SHORT_TEXT' ? { manuallyReviewed: false } : {}),
+          ...(existing.llmReviewed ? { llmReviewed: false } : {}),
+      };
     updates.push({ id: existing.id, data });
     recalculatedAnswers.set(question.id, { ...existing, ...data });
   }

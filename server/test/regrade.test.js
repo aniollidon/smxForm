@@ -51,6 +51,52 @@ test('preserves an already-reviewed manual answer when another question changes'
   assert.equal(result.status, 'GRADED');
 });
 
+test('preserves teacher-reviewed short text unless its grading key changes', () => {
+  const quiz = { maxScore: 10, negativePenalty: 0, gradingVersion: 3 };
+  const questions = [
+    { id: 1, type: 'SHORT_TEXT', points: 2, gradingVersion: 1, answerKey: JSON.stringify({ accepted: ['correcte'] }) },
+    { id: 2, type: 'SHORT_TEXT', points: 2, gradingVersion: 2, answerKey: JSON.stringify({ accepted: ['correcte'] }) },
+  ];
+  const answers = [
+    { id: 10, questionId: 1, value: JSON.stringify('quasi'), score: 1.5, needsReview: false, manuallyReviewed: true, questionGradingVersion: 1 },
+    { id: 11, questionId: 2, value: JSON.stringify('quasi'), score: 1.5, needsReview: false, manuallyReviewed: true, questionGradingVersion: 1 },
+  ];
+  const result = regradeAttempt(quiz, questions, answers);
+  assert.deepEqual(result.answerUpdates, [
+    { id: 10, data: { score: 1.5, needsReview: false, questionGradingVersion: 1, manuallyReviewed: true } },
+    { id: 11, data: { score: 0, needsReview: false, questionGradingVersion: 2, manuallyReviewed: false } },
+  ]);
+});
+
+test('preserves LLM-reviewed short text unless its grading key changes', () => {
+  const quiz = { maxScore: 10, negativePenalty: 0, gradingVersion: 3 };
+  const questions = [
+    { id: 1, type: 'SHORT_TEXT', points: 2, gradingVersion: 1, answerKey: JSON.stringify({ accepted: ['correcte'] }) },
+    { id: 2, type: 'SHORT_TEXT', points: 2, gradingVersion: 2, answerKey: JSON.stringify({ accepted: ['correcte'] }) },
+  ];
+  const answers = [
+    { id: 10, questionId: 1, value: JSON.stringify('gairebé'), score: 1.5, needsReview: false, llmReviewed: true, questionGradingVersion: 1 },
+    { id: 11, questionId: 2, value: JSON.stringify('gairebé'), score: 1.5, needsReview: false, llmReviewed: true, questionGradingVersion: 1 },
+  ];
+  const result = regradeAttempt(quiz, questions, answers);
+  assert.deepEqual(result.answerUpdates, [
+    { id: 10, data: { score: 1.5, needsReview: false, questionGradingVersion: 1, llmReviewed: true } },
+    { id: 11, data: { score: 0, needsReview: false, questionGradingVersion: 2, manuallyReviewed: false, llmReviewed: false } },
+  ]);
+});
+
+test('clears LLM provenance when an edited long-text question becomes pending again', () => {
+  const result = regradeAttempt(
+    { maxScore: 10, negativePenalty: 0, gradingVersion: 2 },
+    [{ id: 1, type: 'LONG_TEXT', points: 2, gradingVersion: 1, answerKey: '{}' }],
+    [{ id: 10, questionId: 1, value: JSON.stringify('Resposta'), score: 1.5, needsReview: false, manuallyReviewed: false, llmReviewed: true, questionGradingVersion: 0 }],
+  );
+  assert.deepEqual(result.answerUpdates, [
+    { id: 10, data: { score: null, needsReview: true, questionGradingVersion: 1, llmReviewed: false } },
+  ]);
+  assert.equal(result.status, 'NEEDS_REVIEW');
+});
+
 test('detects whether an exported Classroom grade differs from the current score', () => {
   assert.equal(hasChangedExportedGrade({ exportedAt: new Date(), exportedScore: 6, score: 8 }), true);
   assert.equal(hasChangedExportedGrade({ exportedAt: new Date(), exportedScore: 8, score: 8 }), false);

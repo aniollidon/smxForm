@@ -5,6 +5,7 @@ const prisma = require('../db');
 const classroom = require('../services/classroom');
 const { computeAttemptScore } = require('../grading');
 const { regradeAttempt, getGradingStatus } = require('../grading/regrade');
+const { evaluateAnswers } = require('../services/llm');
 const { requireTeacher } = require('../auth');
 
 const router = express.Router();
@@ -35,8 +36,8 @@ const configSchemas = {
 const keySchemas = {
   MCQ: z.object({ correct: z.array(id).min(1), allOrNothing: z.boolean().optional() }),
   TRUE_FALSE: z.object({ correct: z.boolean() }),
-  MATCHING: z.object({ pairs: z.record(id) }),
-  ORDERING: z.object({ order: z.array(id).min(2).max(30) }),
+  MATCHING: z.object({ pairs: z.record(id), allOrNothing: z.boolean().default(false) }),
+  ORDERING: z.object({ order: z.array(id).min(2).max(30), allOrNothing: z.boolean().default(false) }),
   IMAGE_LABEL: z.object({ labels: z.record(z.string()) }),
   SHORT_TEXT: z.object({ accepted: z.array(z.string()).default([]), regex: z.string().max(200).optional() }),
   LONG_TEXT: z.object({ reference: z.string().optional() }).passthrough(),
@@ -296,7 +297,7 @@ router.delete('/attempts/:aid', wrap(async (req, res) => {
 
 router.get('/questions/:qid/answers', wrap(async (req, res) => {
   const question = await ownQuestion(req);
-  if (!['LONG_TEXT', 'IMAGE_UPLOAD'].includes(question.type)) throw fail(400, 'Aquesta pregunta no té correcció manual');
+  if (!['SHORT_TEXT', 'LONG_TEXT', 'IMAGE_UPLOAD'].includes(question.type)) throw fail(400, 'Aquesta pregunta no té correcció manual');
   const answers = await prisma.answer.findMany({
     where: { questionId: question.id, attempt: { status: { not: 'IN_PROGRESS' } } },
     include: { attempt: { include: { user: { select: { name: true, email: true } } } } },
@@ -309,6 +310,82 @@ router.get('/questions/:qid/answers', wrap(async (req, res) => {
   });
 }));
 
+router.put('/questions/:qid/grading-criteria', wrap(async (req, res) => {
+  const question = await ownQuestion(req);
+  if (!['SHORT_TEXT', 'LONG_TEXT'].includes(question.type)) throw fail(400, 'L’avaluació assistida només està disponible per a respostes de text');
+  const body = z.object({ criteria: z.string().max(5000) }).parse(req.body);
+  const updated = await prisma.question.update({
+    where: { id: question.id },
+    data: { gradingCriteria: body.criteria.trim() || null },
+  });
+  res.json({ gradingCriteria: updated.gradingCriteria });
+}));
+
+router.post('/questions/:qid/ai-grade', wrap(async (req, res) => {
+  const question = await ownQuestion(req);
+  if (!['SHORT_TEXT', 'LONG_TEXT'].includes(question.type)) throw fail(400, 'L’avaluació assistida només està disponible per a respostes de text');
+  const body = z.object({ answerIds: z.array(z.number().int().positive()).min(1).max(100) }).parse(req.body);
+  if (new Set(body.answerIds).size !== body.answerIds.length) throw fail(400, 'La selecció conté respostes duplicades');
+  const answers = await prisma.answer.findMany({
+    where: {
+      id: { in: body.answerIds },
+      questionId: question.id,
+      attempt: { status: { not: 'IN_PROGRESS' } },
+    },
+  });
+  if (answers.length !== body.answerIds.length) throw fail(400, 'La selecció inclou respostes que no pertanyen a aquesta pregunta o no s’han lliurat');
+  const answerById = new Map(answers.map((answer) => [answer.id, answer]));
+  const selected = body.answerIds.map((answerId) => {
+    const answer = answerById.get(answerId);
+    const value = JSON.parse(answer.value);
+    if (typeof value !== 'string' || !value.trim()) throw fail(400, 'No es poden avaluar respostes buides o no textuals');
+    return { answerId: answer.id, value };
+  });
+
+  const answerKey = JSON.parse(question.answerKey);
+  const expectedAnswer = question.type === 'LONG_TEXT'
+    ? answerKey.reference || ''
+    : { accepted: answerKey.accepted || [], ...(answerKey.regex ? { regex: answerKey.regex } : {}) };
+  const evaluations = [];
+  const provider = (process.env.LLM_PROVIDER || (process.env.OPENAI_API_KEY ? 'openai' : 'gemini')).toLowerCase();
+  const llmConfig = provider === 'openai'
+    ? { apiKey: process.env.OPENAI_API_KEY, model: process.env.OPENAI_MODEL || 'gpt-4.1-mini' }
+    : provider === 'gemini'
+      ? { apiKey: process.env.GEMINI_API_KEY, model: process.env.GEMINI_MODEL || 'gemini-2.5-flash' }
+      : null;
+  if (!llmConfig) throw fail(500, 'LLM_PROVIDER ha de ser "gemini" o "openai"');
+  for (let offset = 0; offset < selected.length; offset += 20) {
+    const batch = selected.slice(offset, offset + 20);
+    evaluations.push(...await evaluateAnswers({
+      provider,
+      ...llmConfig,
+      questionText: question.text,
+      expectedAnswer,
+      maxPoints: question.points,
+      criteria: question.gradingCriteria || 'Avalua l’exactitud, la pertinència i la completesa de la resposta respecte de l’enunciat i la resposta esperada. Assigna una puntuació proporcional als punts assolits i justifica-la breument.',
+      answers: batch,
+    }));
+  }
+  const affectedAttemptIds = [...new Set(answers.map((answer) => answer.attemptId))];
+  await prisma.$transaction(async (tx) => {
+    for (const evaluation of evaluations) {
+      await tx.answer.update({
+        where: { id: evaluation.answerId },
+        data: {
+          score: evaluation.score,
+          feedback: evaluation.feedback,
+          needsReview: false,
+          manuallyReviewed: false,
+          llmReviewed: true,
+          questionGradingVersion: question.gradingVersion,
+        },
+      });
+    }
+    for (const attemptId of affectedAttemptIds) await recomputeAttempt(attemptId, tx);
+  });
+  res.json({ evaluations: evaluations.map(({ answerId }) => ({ answerId, llmReviewed: true })) });
+}));
+
 router.put('/answers/:id/review', wrap(async (req, res) => {
   const body = z.object({ score: z.number(), feedback: z.string().max(2000).optional() }).parse(req.body);
   const ans = await prisma.answer.findUnique({
@@ -319,20 +396,27 @@ router.put('/answers/:id/review', wrap(async (req, res) => {
   if (body.score < 0 || body.score > ans.question.points) throw fail(400, 'Puntuació fora de rang');
   await prisma.answer.update({
     where: { id: ans.id },
-    data: { score: body.score, feedback: body.feedback ?? null, needsReview: false, questionGradingVersion: ans.question.gradingVersion },
+    data: {
+      score: body.score,
+      feedback: body.feedback ?? null,
+      needsReview: false,
+      questionGradingVersion: ans.question.gradingVersion,
+      manuallyReviewed: true,
+      llmReviewed: false,
+    },
   });
   const attempt = await recomputeAttempt(ans.attemptId);
   res.json(attempt);
 }));
 
-async function recomputeAttempt(attemptId) {
-  const attempt = await prisma.attempt.findUnique({
+async function recomputeAttempt(attemptId, db = prisma) {
+  const attempt = await db.attempt.findUnique({
     where: { id: attemptId },
     include: { quiz: { include: { questions: true } }, answers: true },
   });
   const map = new Map(attempt.answers.map((a) => [a.questionId, a]));
   const { score, pending } = computeAttemptScore(attempt.quiz, attempt.quiz.questions, map);
-  return prisma.attempt.update({
+  return db.attempt.update({
     where: { id: attemptId },
     data: {
       score: pending ? null : score,
