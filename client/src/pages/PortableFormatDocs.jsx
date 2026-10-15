@@ -76,7 +76,7 @@ export default function PortableFormatDocs() {
           <Field name="allowRetry">Booleà. Permet més d’un intent; per defecte <code>false</code>.</Field>
           <Field name="maxAttempts">Enter d’1 a 100; per defecte <code>1</code>. Només s’aplica quan <code>allowRetry</code> és true.</Field>
           <Field name="negativePenalty">Nombre entre 0 i 1: fracció dels punts de la pregunta que es resten per una resposta incorrecta. <code>0</code> no resta; per defecte <code>0</code>.</Field>
-          <Field name="gradeToExport"><code>BEST</code> (millor intent) o <code>LAST</code> (últim intent); per defecte <code>BEST</code>. Regula l’exportació de notes a Classroom.</Field>
+          <Field name="gradeToExport"><code>BEST</code> (millor intent) o <code>LAST</code> (últim intent); per defecte <code>BEST</code>. S’aplica en exportar notes a Classroom quan l’entrega permet intents repetits; a l’editor, aquesta opció només apareix en activar <code>allowRetry</code>.</Field>
           <Field name="showResults"><code>NONE</code> (no mostra resultats), <code>SCORE</code> (només nota) o <code>FULL</code> (nota, respostes i clau); per defecte <code>SCORE</code>.</Field>
           <Field name="showResultsFrom">Data/hora ISO 8601 amb zona horària, per exemple <code>2026-10-14T08:00:00.000Z</code>; amaga els resultats fins aquell moment. <code>null</code> o absència: sense retard.</Field>
         </tbody></table></div>
@@ -95,22 +95,23 @@ export default function PortableFormatDocs() {
 
         <h2>Tipus de pregunta</h2>
         <h3><code>MCQ</code> · Opció múltiple</h3>
-        <p>Afegiu <code>multiple</code> (booleà, per defecte false) i <code>options</code>, una llista de 2 a 12 objectes. Cada opció té <code>text</code> (cadena no buida) i <code>correct</code> (booleà). Marqueu com a correctes una o més opcions; amb <code>multiple: false</code> s’ha de marcar exactament una. El corrector dona puntuació parcial proporcional quan s’activa l’elecció múltiple.</p>
-        <pre><code>{`"type": "MCQ", "multiple": true, "options": [{"text":"A", "correct":true}, {"text":"B", "correct":true}, {"text":"C", "correct":false}]`}</code></pre>
+        <p>Afegiu <code>multiple</code> (booleà, per defecte false) i <code>options</code>, una llista de 2 a 12 objectes. Cada opció té <code>text</code> (cadena no buida) i <code>correct</code> (booleà). Marqueu com a correctes una o més opcions; amb <code>multiple: false</code> s’ha de marcar exactament una. En preguntes de resposta múltiple, per defecte la puntuació és parcial i proporcional. Amb <code>allOrNothing: true</code>, només puntua si s’han seleccionat totes les opcions correctes i cap d’incorrecta; qualsevol altra selecció compta com a incorrecta. Si s’omet, és <code>false</code>.</p>
+        <pre><code>{`"type": "MCQ", "multiple": true, "allOrNothing": true,
+      "options": [{"text":"A", "correct":true}, {"text":"B", "correct":true}, {"text":"C", "correct":false}]`}</code></pre>
 
         <h3><code>TRUE_FALSE</code> · Cert o fals</h3>
         <p>Afegiu <code>correct</code> amb el valor JSON <code>true</code> o <code>false</code>, no una cadena.</p>
         <pre><code>{`"type": "TRUE_FALSE", "correct": false`}</code></pre>
 
         <h3><code>MATCHING</code> · Relacionar</h3>
-        <p><code>pairs</code> és una llista de 2 a 12 objectes <code>{'{ "left": "...", "right": "..." }'}</code>. El valor de <code>right</code> en cada parella és la resposta correcta per a aquell <code>left</code>. <code>distractors</code> és una llista opcional de cadenes que s’afegeixen a la columna dreta sense parella correcta; el total de respostes de la dreta no pot superar 15. Tots els textos de parella han de ser no buits.</p>
+        <p><code>pairs</code> és una llista de 2 a 12 objectes <code>{'{ "left": "...", "right": "..." }'}</code>. El valor de <code>right</code> en cada parella és la resposta correcta per a aquell <code>left</code>. <code>distractors</code> és una llista opcional de cadenes que s’afegeixen a la columna dreta sense parella correcta; el total de respostes de la dreta no pot superar 15. Tots els textos de parella han de ser no buits. Per defecte hi ha puntuació parcial. Amb <code>allOrNothing: true</code>, cal encertar totes les parelles; si no, la resposta compta com a incorrecta. Si s’omet, és <code>false</code>.</p>
         <pre><code>{`"type": "MATCHING",
 "pairs": [{"left":"HTTP", "right":"80"}, {"left":"HTTPS", "right":"443"}],
-"distractors": ["21"]`}</code></pre>
+      "distractors": ["21"], "allOrNothing": true`}</code></pre>
 
-  <h3><code>ORDERING</code> · Ordenar una llista</h3>
-  <p><code>items</code> és una llista de 2 a 30 cadenes no buides (fins a 500 caràcters cadascuna) en l’ordre correcte. Durant l’intent es poden reordenar; la puntuació parcial correspon als elements que queden a la posició correcta.</p>
-  <pre><code>{`"type": "ORDERING", "items": ["Planifica", "Executa", "Avalua"]`}</code></pre>
+        <h3><code>ORDERING</code> · Ordenar una llista</h3>
+        <p><code>items</code> és una llista de 2 a 30 cadenes no buides (fins a 500 caràcters cadascuna) en l’ordre correcte. Durant l’intent es poden reordenar; per defecte, es dona puntuació parcial pels elements situats correctament. Amb <code>allOrNothing: true</code>, només l’ordre completament correcte puntua; qualsevol altre ordre compta com a incorrecte. Si s’omet, és <code>false</code>.</p>
+        <pre><code>{`"type": "ORDERING", "items": ["Planifica", "Executa", "Avalua"], "allOrNothing": true`}</code></pre>
 
         <h3><code>IMAGE_LABEL</code> · Etiquetar una imatge</h3>
         <p><code>image</code> és obligatori. <code>markers</code> és una llista d’1 a 30 punts. Cada punt conté <code>x</code> i <code>y</code> (nombres de 0 a 100, percentatge des de l’angle superior esquerre) i <code>label</code> (la resposta correcta). <code>predefined</code> és booleà: true fa que l’alumne triï d’una llista. <code>extraLabels</code> és una llista opcional de distractors de text, només utilitzada quan <code>predefined</code> és true.</p>
@@ -119,7 +120,7 @@ export default function PortableFormatDocs() {
 "predefined": true, "extraLabels": ["Membrana"]`}</code></pre>
 
         <h3><code>SHORT_TEXT</code> · Resposta breu autocorregida</h3>
-        <p><code>accepted</code> és una llista de respostes acceptades; la comparació ignora majúscules, accents i espais exteriors. Indiqueu almenys una resposta o bé una <code>regex</code> opcional (expressió regular JavaScript, fins a 200 caràcters). Es poden combinar. Si s’especifica una expressió regular, aquesta també compta com a resposta correcta.</p>
+        <p><code>accepted</code> és una llista de respostes acceptades; la comparació ignora majúscules, accents i espais exteriors. Indiqueu almenys una resposta o bé una <code>regex</code> opcional (expressió regular JavaScript, fins a 200 caràcters). Es poden combinar. Si s’especifica una expressió regular, aquesta també compta com a resposta correcta. Després de l’autoavaluació, el professorat pot revisar i ajustar manualment la puntuació de cada resposta si cal.</p>
         <pre><code>{`"type": "SHORT_TEXT", "accepted": ["diòxid de carboni", "CO2"], "regex": "^co2$"`}</code></pre>
 
         <h3><code>LONG_TEXT</code> · Resposta llarga de correcció manual</h3>
@@ -136,7 +137,10 @@ export default function PortableFormatDocs() {
 
         <h2>Generació amb una LLM</h2>
         <p>Indiqueu a la LLM que retorni només un objecte JSON vàlid, sense blocs Markdown; demaneu <code>format: "palamForm.quiz"</code>, <code>version: 1</code> i que cada opció inclogui explícitament <code>correct</code>. Les imatges necessiten dades base64 reals i coordenades mesurades, així que no demaneu a una LLM que inventi una data URI. Reviseu sempre la clau de respostes abans de publicar.</p>
-        <p>Per importar: des de <Link to="/t">l’espai del professorat</Link>, trieu <strong>Importa JSON</strong>. La importació valida tot el document abans de crear l’entrega, puja les imatges incrustades i obre el resultat com a esborrany. El límit del fitxer és 50 MiB. Per exportar, feu servir <strong>Exporta JSON</strong> a l’editor d’una entrega.</p>
+        <h2>Importar i exportar com a professorat</h2>
+        <p>A <Link to="/t">l’espai del professorat</Link>, <strong>Importa JSON</strong> crea una entrega nova a partir d’un fitxer compatible. Es valida el document, s’hi carreguen les imatges incrustades i l’entrega s’obre com a esborrany no publicat; no modifica cap entrega existent. El fitxer pot tenir fins a 50 MiB i cada imatge, fins a 5 MiB.</p>
+        <p><strong>Exporta JSON</strong>, a l’editor d’una entrega, descarrega les preguntes, les respostes correctes, la configuració i les imatges incrustades. El fitxer no inclou l’estat de publicació, els enllaços a Classroom ni els intents o les notes dels alumnes, així que no és una còpia de seguretat de l’activitat completa. Conté la clau de respostes: tracteu-lo com a material del professorat.</p>
+        <p>L’exportació de notes a Google Classroom és una acció diferent, disponible des de l’editor quan l’entrega està vinculada a una tasca. Quan hi ha intents repetits, <code>gradeToExport</code> tria la nota més alta o l’última. L’opció <strong>Retorna les tasques als alumnes</strong> s’escull en el moment d’exportar i no es desa al JSON.</p>
         <p className="format-back"><Link to="/">Torna a palamForm</Link></p>
       </article>
     </main>

@@ -37,7 +37,7 @@ export function exportQuestion(question, image = null) {
   switch (question.type) {
     case 'MCQ': {
       const correct = new Set(answer.correct || []);
-      return { ...common, multiple: !!config.multiple, options: config.options.map((option) => ({ text: option.text, correct: correct.has(option.id) })) };
+      return { ...common, multiple: !!config.multiple, allOrNothing: !!answer.allOrNothing, options: config.options.map((option) => ({ text: option.text, correct: correct.has(option.id) })) };
     }
     case 'TRUE_FALSE':
       return { ...common, correct: answer.correct };
@@ -46,13 +46,14 @@ export function exportQuestion(question, image = null) {
       const used = new Set(Object.values(answer.pairs || {}));
       return {
         ...common,
+        allOrNothing: !!answer.allOrNothing,
         pairs: config.left.map((item) => ({ left: item.text, right: rightById.get(answer.pairs?.[item.id]) })),
         distractors: config.right.filter((item) => !used.has(item.id)).map((item) => item.text),
       };
     }
     case 'ORDERING': {
       const itemsById = new Map(config.items.map((item) => [item.id, item.text]));
-      return { ...common, items: (answer.order || []).map((id) => itemsById.get(id)) };
+      return { ...common, allOrNothing: !!answer.allOrNothing, items: (answer.order || []).map((id) => itemsById.get(id)) };
     }
     case 'IMAGE_LABEL': {
       const correctLabels = new Set(Object.values(answer.labels || {}));
@@ -123,7 +124,8 @@ export function importQuestionToDraft(question) {
       requireValue(question.options.every((option) => typeof option.text === 'string' && typeof (option.correct ?? false) === 'boolean'), 'MCQ: cada opció necessita «text» de tipus string i «correct» de tipus boolean.');
       requireValue(typeof (question.multiple ?? false) === 'boolean', 'MCQ: «multiple» ha de ser boolean.');
       requireValue(question.multiple ? question.options.some((option) => option.correct) : question.options.filter((option) => option.correct).length === 1, 'MCQ: marca almenys una opció correcta; si «multiple» és false, marca’n exactament una.');
-      draft = { ...base, multiple: question.multiple ?? false, opts: question.options.map((option) => ({ id: uid(), text: option.text, correct: option.correct ?? false })) };
+      requireValue(typeof (question.allOrNothing ?? false) === 'boolean', 'MCQ: «allOrNothing» ha de ser boolean.');
+      draft = { ...base, multiple: question.multiple ?? false, allOrNothing: question.allOrNothing ?? false, opts: question.options.map((option) => ({ id: uid(), text: option.text, correct: option.correct ?? false })) };
       break;
     case 'TRUE_FALSE':
       requireValue(typeof question.correct === 'boolean', 'TRUE_FALSE: «correct» ha de ser true o false.');
@@ -133,13 +135,15 @@ export function importQuestionToDraft(question) {
       requireValue(Array.isArray(question.pairs) && question.pairs.length >= 2 && question.pairs.length <= 12, 'MATCHING: «pairs» ha de tenir entre 2 i 12 parelles.');
       requireValue(question.pairs.every((pair) => typeof pair.left === 'string' && typeof pair.right === 'string'), 'MATCHING: cada parella necessita «left» i «right» de tipus string.');
       requireValue(Array.isArray(question.distractors ?? []) && question.distractors.length + question.pairs.length <= 15 && (question.distractors ?? []).every((item) => typeof item === 'string'), 'MATCHING: «distractors» ha de ser una llista de text; el total de respostes no pot superar 15.');
-      draft = { ...base, pairs: (question.pairs || []).map((pair) => ({ left: pair.left, right: pair.right })), distractors: (question.distractors || []).join('\n') };
+      requireValue(typeof (question.allOrNothing ?? false) === 'boolean', 'MATCHING: «allOrNothing» ha de ser boolean.');
+      draft = { ...base, allOrNothing: question.allOrNothing ?? false, pairs: (question.pairs || []).map((pair) => ({ left: pair.left, right: pair.right })), distractors: (question.distractors || []).join('\n') };
       break;
     }
     case 'ORDERING':
       requireValue(Array.isArray(question.items) && question.items.length >= 2 && question.items.length <= 30, 'ORDERING: «items» ha de tenir entre 2 i 30 elements.');
       requireValue(question.items.every((item) => typeof item === 'string' && item.trim() && item.length <= 500), 'ORDERING: cada element ha de ser una cadena de text no buida de fins a 500 caràcters.');
-      draft = { ...base, items: question.items.map((text) => ({ id: uid(), text })) };
+      requireValue(typeof (question.allOrNothing ?? false) === 'boolean', 'ORDERING: «allOrNothing» ha de ser boolean.');
+      draft = { ...base, allOrNothing: question.allOrNothing ?? false, items: question.items.map((text) => ({ id: uid(), text })) };
       break;
     case 'IMAGE_LABEL':
       requireValue(typeof question.image === 'string', 'IMAGE_LABEL: cal incloure «image» amb una imatge data URI.');

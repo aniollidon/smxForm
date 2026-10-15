@@ -30,7 +30,7 @@ function AnswerReviewForm({ answer, question, onDone }) {
     <div className="question-answer-form">
       <div className="question-answer-meta">
         <span className={`question-answer-state${!answer.needsReview ? ' is-reviewed' : ''}`}>
-          {answer.needsReview ? 'Pendent de correcció' : 'Puntuada'}
+          {answer.needsReview ? 'Pendent de correcció' : answer.manuallyReviewed ? 'Revisada pel professor' : 'Puntuada'}
         </span>
         {answer.feedback && <span className="muted">Comentari desat</span>}
       </div>

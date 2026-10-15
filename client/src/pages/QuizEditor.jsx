@@ -289,7 +289,7 @@ export default function QuizEditor() {
               <span className="quiz-question-prompt">{i + 1}. {q.text.slice(0, 100)} <span className="muted">({formatGrade(q.points)} pt{q.required ? ', obligatòria' : ''})</span></span>
             </div>
             <div className="row quiz-question-actions">
-              {['LONG_TEXT', 'IMAGE_UPLOAD'].includes(q.type) && <Link className="question-answer-shortcut" to={`/t/quiz/${id}/question/${q.id}/answers`}>Veure respostes ↗</Link>}
+              {['SHORT_TEXT', 'LONG_TEXT', 'IMAGE_UPLOAD'].includes(q.type) && <Link className="question-answer-shortcut" to={`/t/quiz/${id}/question/${q.id}/answers`}>Veure respostes ↗</Link>}
               <button className="secondary" disabled={i === 0} onClick={() => move(i, -1)}>↑</button>
               <button className="secondary" disabled={i === quiz.questions.length - 1} onClick={() => move(i, 1)}>↓</button>
               <button className="secondary" onClick={() => setEditing(fromQuestion(q))}>Edita</button>

@@ -59,7 +59,7 @@ export default function AttemptReview() {
   const { data, isLoading } = useQuery({ queryKey: ['attempt-review', id], queryFn: () => api(`/api/teacher/attempts/${id}`) });
   if (isLoading) return <p>Carregant…</p>;
   const answers = [...data.answers].sort((a, b) => a.question.order - b.question.order);
-  const manual = (a) => ['LONG_TEXT', 'IMAGE_UPLOAD'].includes(a.question.type);
+  const manual = (a) => ['SHORT_TEXT', 'LONG_TEXT', 'IMAGE_UPLOAD'].includes(a.question.type);
   const pendingCount = answers.filter((a) => manual(a) && a.needsReview).length;
   const status = { NEEDS_REVIEW: 'Pendent de correcció', GRADED: 'Corregit', SUBMITTED: 'Enviat' }[data.status] || data.status;
   const refresh = () => qc.invalidateQueries({ queryKey: ['attempt-review', id] });
@@ -93,7 +93,7 @@ export default function AttemptReview() {
           {manual(a) && a.question.answerKey.reference && <p className="review-reference"><span>REFERÈNCIA</span>{a.question.answerKey.reference}</p>}
           {manual(a) && (
             <div className="review-grading">
-              <div className="review-grading-heading"><span className="eyebrow">CORRECCIÓ D'AQUEST ALUMNE</span><Link to={`/t/quiz/${data.quizId}/question/${a.question.id}/answers`}>Totes les respostes d'aquesta pregunta →</Link></div>
+              <div className="review-grading-heading"><span className="eyebrow">{a.question.type === 'SHORT_TEXT' ? 'REVISIÓ DOCENT OPCIONAL' : "CORRECCIÓ D'AQUEST ALUMNE"}</span><Link to={`/t/quiz/${data.quizId}/question/${a.question.id}/answers`}>Totes les respostes d'aquesta pregunta →</Link></div>
               <ReviewForm a={a} onDone={refresh} />
             </div>
           )}

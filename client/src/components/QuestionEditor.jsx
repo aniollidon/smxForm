@@ -44,9 +44,12 @@ export default function QuestionEditor({ initial, onSave, onCancel }) {
       <div className="row">
         <label>Punts <input type="number" min="0" step="0.25" value={d.points} onChange={(e) => set({ points: e.target.value })} /></label>
         <label><input type="checkbox" checked={d.required} onChange={(e) => set({ required: e.target.checked })} /> Obligatòria</label>
-        <label><input type="checkbox" checked={d.allowClipboard} onChange={(e) => set({ allowClipboard: e.target.checked })} /> Permet copiar i enganxar en aquesta pregunta</label>
+        <label><input type="checkbox" checked={d.allowClipboard} onChange={(e) => set({ allowClipboard: e.target.checked })} /> Permet copiar i enganxar</label>
         {['MCQ', 'MATCHING', 'ORDERING', 'IMAGE_LABEL'].includes(d.type) && (
           <label><input type="checkbox" checked={d.shuffleOptions} onChange={(e) => set({ shuffleOptions: e.target.checked })} /> Respostes en ordre aleatori</label>
+        )}
+        {(d.type === 'MATCHING' || d.type === 'ORDERING' || (d.type === 'MCQ' && d.multiple)) && (
+          <label><input type="checkbox" checked={d.allOrNothing} onChange={(e) => set({ allOrNothing: e.target.checked })} /> Puntuació tot o res</label>
         )}
       </div>
 
@@ -149,6 +152,7 @@ export default function QuestionEditor({ initial, onSave, onCancel }) {
       {d.type === 'LONG_TEXT' && (
         <label>Resposta de referència (per al corrector)<textarea value={d.reference} onChange={(e) => set({ reference: e.target.value })} /></label>
       )}
+      {d.type === 'SHORT_TEXT' && <p className="muted">S’autoavalua; el professor pot revisar i ajustar la puntuació manualment si cal.</p>}
       {(d.type === 'LONG_TEXT' || d.type === 'IMAGE_UPLOAD') && <p className="muted">Aquesta pregunta es corregeix manualment.</p>}
 
       {err && <p className="error">{err}</p>}
