@@ -286,7 +286,7 @@ export default function QuizEditor() {
           <div className="card row between quiz-question-row" key={q.id}>
             <div className="quiz-question-summary">
               <span className="badge quiz-question-type">{TYPE_LABELS[q.type]}</span>
-              <span className="quiz-question-prompt">{i + 1}. {q.text.slice(0, 100)} <span className="muted">({formatGrade(q.points)} pt{q.required ? ', obligatòria' : ''})</span></span>
+              <div className="review-question-title"><span className="review-question-number">{String(i + 1).padStart(2, '0')}</span><span className="quiz-question-prompt">{q.text.slice(0, 100)} <span className="muted">({formatGrade(q.points)} pt{q.required ? ', obligatòria' : ''})</span></span></div>
             </div>
             <div className="row quiz-question-actions">
               {['SHORT_TEXT', 'LONG_TEXT', 'IMAGE_UPLOAD'].includes(q.type) && <Link className="question-answer-shortcut" to={`/t/quiz/${id}/question/${q.id}/answers`}>Veure respostes ↗</Link>}

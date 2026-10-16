@@ -177,8 +177,8 @@ export default function QuestionReview() {
       <p className="review-breadcrumb"><Link to={`/t/quiz/${id}/attempts`}>← Tots els intents</Link><span>/</span>Revisió per pregunta</p>
       <header className="question-review-header">
         <div className="question-review-title">
-          <span className="eyebrow">PREGUNTA {String(data.question.order + 1).padStart(2, '0')} · {data.question.type}</span>
-          <h1>{data.question.text}</h1>
+          <span className="eyebrow">{data.question.type}</span>
+          <div className="question-review-heading"><span className="review-question-number">{String(data.question.order + 1).padStart(2, '0')}</span><h1>{data.question.text}</h1></div>
           <p>{formatGrade(data.question.points)} punts · Respostes de tots els intents enviats</p>
           {expectedAnswer && <div className="review-reference question-review-reference"><span>RESPOSTA ESPERADA</span>{expectedAnswer}</div>}
         </div>

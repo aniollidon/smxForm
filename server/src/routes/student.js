@@ -52,7 +52,7 @@ const resultsVisible = (quiz) => quiz.showResults !== 'NONE' && (!quiz.showResul
 
 function attemptResult(attempt, quiz, questions, answers) {
   if (attempt.status === 'IN_PROGRESS') return null;
-  const base = { status: attempt.status, submittedAt: attempt.submittedAt, visible: resultsVisible(quiz) };
+  const base = { status: attempt.status, submittedAt: attempt.submittedAt, visible: resultsVisible(quiz), questionCount: answers.length };
   if (!base.visible) return base;
   base.score = attempt.score;
   base.maxScore = quiz.maxScore;

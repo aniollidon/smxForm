@@ -30,10 +30,13 @@ export default function QuizPreview() {
       {quiz.description && <p className="preview-description">{quiz.description}</p>}
       {quiz.questions.map((question, index) => (
         <div className="card stack" key={question.id}>
-          <div>
-            <b>{index + 1}. {question.text}</b>{' '}
-            {question.required && <span className="error">*</span>}{' '}
-                <span className="muted">({formatGrade(question.points)} pt)</span>
+          <div className="review-question-title">
+            <span className="review-question-number">{String(index + 1).padStart(2, '0')}</span>
+            <div className="review-question-text">
+              <b>{question.text}</b>{' '}
+              {question.required && <span className="error">*</span>}{' '}
+              <span className="muted">({formatGrade(question.points)} pt)</span>
+            </div>
           </div>
           {question.type !== 'IMAGE_LABEL' && question.imageUrl && <img className="preview-question-image" src={fileUrl(question.imageUrl)} alt="" />}
           <div className="question-response">

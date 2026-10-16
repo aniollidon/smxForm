@@ -15,7 +15,7 @@ function AnswerBlock({ label, children, tone }) {
   );
 }
 
-function QuestionResult({ q }) {
+function QuestionResult({ q, index }) {
   const value = q.value;
   const key = q.answerKey || {};
   const options = q.config?.options || [];
@@ -146,7 +146,7 @@ function QuestionResult({ q }) {
   return (
     <div className="card stack result-question">
       <div className="row between result-heading">
-        <b>{q.text}</b>
+        <div className="review-question-title"><span className="review-question-number">{String(index + 1).padStart(2, '0')}</span><b>{q.text}</b></div>
         <span className={`result-score result-${scoreTone}`}>{formatGrade(q.score)} / {formatGrade(q.points)} · {status}</span>
       </div>
       {answers}
@@ -155,14 +155,35 @@ function QuestionResult({ q }) {
   );
 }
 
-function Result({ result }) {
-  if (!result.visible) return <p>Entrega enviada. Els resultats encara no estan disponibles.</p>;
+function Result({ result, title }) {
+  if (!result.visible) {
+    return (
+      <div className="attempt-review">
+        <header className="review-summary">
+          <div className="review-student"><span className="eyebrow">RESULTAT D'INTENT</span><h1>{title}</h1></div>
+        </header>
+        <p>Entrega enviada. Els resultats encara no estan disponibles.</p>
+      </div>
+    );
+  }
+  const status = { NEEDS_REVIEW: 'Pendent de correcció', GRADED: 'Corregit', SUBMITTED: 'Enviat' }[result.status] || result.status;
   return (
-    <div className="stack">
-      <p>
-        {result.status === 'NEEDS_REVIEW' ? 'Pendent de correcció manual per part del professor.' : <>Nota: <b>{formatGrade(result.score)} / {formatGrade(result.maxScore)}</b></>}
-      </p>
-      {result.questions?.map((q) => <QuestionResult q={q} key={q.id} />)}
+    <div className="attempt-review">
+      <header className="review-summary">
+        <div className="review-student">
+          <span className="eyebrow">RESULTAT D'INTENT</span>
+          <h1>{title}</h1>
+        </div>
+        <div className="review-metrics">
+          <div className="review-metric"><span>ESTAT</span><b>{status}</b></div>
+          <div className={`review-metric review-total-score${result.score != null && result.score <= 0 ? ' is-negative' : ''}`}><span>NOTA</span><b>{formatGrade(result.score)} <i>/ {formatGrade(result.maxScore)}</i></b></div>
+          <div className="review-metric"><span>PREGUNTES</span><b>{result.questionCount}</b></div>
+        </div>
+        {result.status === 'NEEDS_REVIEW' && <p className="review-pending-note">Pendent de correcció manual per part del professor.</p>}
+      </header>
+      <div className="stack">
+        {result.questions?.map((q, index) => <QuestionResult q={q} index={index} key={q.id} />)}
+      </div>
     </div>
   );
 }
@@ -225,9 +246,8 @@ export default function TakeQuiz() {
   if (error) return <p className="error">{error.message}</p>;
   if (data.status !== 'IN_PROGRESS') {
     return (
-      <div className="card stack">
-        <h2>{data.title}</h2>
-        <Result result={data.result} />
+      <div>
+        <Result result={data.result} title={data.title} />
         <Link to="/s">Tornar</Link>
       </div>
     );
@@ -252,7 +272,10 @@ export default function TakeQuiz() {
             className={q.config?.allowClipboard ? undefined : 'take-quiz-question-prompt'}
             onContextMenu={q.config?.allowClipboard ? undefined : (event) => event.preventDefault()}
           >
-            <b>{i + 1}. {q.text}</b> {q.required && <span className="error">*</span>} <span className="muted">({formatGrade(q.points)} pt)</span>
+            <div className="review-question-title">
+              <span className="review-question-number">{String(i + 1).padStart(2, '0')}</span>
+              <div className="review-question-text"><b>{q.text}</b> {q.required && <span className="error">*</span>} <span className="muted">({formatGrade(q.points)} pt)</span></div>
+            </div>
           </div>
           {q.type !== 'IMAGE_LABEL' && q.imageUrl && <img src={`/api/files/${q.imageUrl}`} alt="" style={{ maxWidth: '100%' }} />}
           <div className="question-response">
