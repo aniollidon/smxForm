@@ -69,6 +69,9 @@ app.use('/api/student', studentRouter);
 app.use('/api/files', filesRouter);
 
 const dist = path.resolve(__dirname, '../../client/dist');
+if (prod && !fs.existsSync(path.join(dist, 'index.html'))) {
+  throw new Error('No s’ha trobat el frontend compilat. Executa `npm run build` a client abans d’iniciar el servei.');
+}
 if (fs.existsSync(dist)) {
   app.use(express.static(dist));
   app.get(/^\/(?!api|auth).*/, (_req, res) => res.sendFile(path.join(dist, 'index.html')));

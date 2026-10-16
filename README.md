@@ -17,33 +17,24 @@ cd ../client && npm install && npm run dev   # web a :5173
 ```
 Producció: `cd client && npm run build` i `NODE_ENV=production npm start` a `server` (serveix `client/dist`).
 
-## Producció amb un sol port (recomanat)
-L'app ja està preparada perquè el backend serveixi el frontend compilat. Amb Docker Compose exposes només `:3001`.
+## Producció amb PM2
+El backend serveix el frontend compilat i l'API des del mateix port (`3001`). PM2 executa un únic procés Node.
 
-1. Crea l'arxiu d'entorn de producció:
+1. Copia `.env.production.example` a `server/.env` i configura `BASE_URL`, `SESSION_SECRET`, `GOOGLE_CLIENT_ID` i `GOOGLE_CLIENT_SECRET`.
+2. Instal·la les dependències, genera la base de dades i compila el frontend:
 ```
-cp .env.production.example .env.production
+npm install --global pm2
+cd server && npm ci && npx prisma db push
+cd ../client && npm ci && npm run build
+cd ..
 ```
-
-2. Omple com a mínim:
-- `BASE_URL` amb la URL pública final (mateix host/port que exposes)
-- `SESSION_SECRET`
-- `GOOGLE_CLIENT_ID` i `GOOGLE_CLIENT_SECRET`
-
-3. Arrenca en mode producció:
+3. Inicia i desa el procés de PM2:
 ```
-docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
+pm2 start ecosystem.config.cjs --env production
+pm2 startup
+pm2 save
 ```
-
-4. Atura el servei:
-```
-docker compose -f docker-compose.prod.yml down
-```
-
-Notes:
-- La base de dades SQLite persisteix al volum `smxform_data`.
-- Les pujades d'imatges persisteixen al volum `smxform_uploads`.
-- Prisma s'inicialitza automàticament amb `prisma db push` en arrencar el contenidor.
+Executa també la comanda `sudo` que imprimeix `pm2 startup` per habilitar l'inici automàtic després d'un reinici. L'app queda disponible a `http://localhost:3001` (o al domini que apunta al servei). Per desplegar una nova versió, torna a compilar el frontend i executa `pm2 restart smxform --update-env`.
 
 ## Professors
 Són usuaris a la BD amb `role=TEACHER`: `SEED_TEACHERS` (al `.env`) o `npm run add-teacher -- correu@inspalamos.cat`.
