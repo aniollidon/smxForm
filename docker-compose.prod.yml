@@ -1,0 +1,25 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: smxform-app
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: "3001"
+      NODE_ENV: production
+      BASE_URL: ${BASE_URL}
+      SESSION_SECRET: ${SESSION_SECRET}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      SEED_TEACHERS: ${SEED_TEACHERS:-}
+      DATABASE_URL: file:/app/data/dev.db
+    volumes:
+      - smxform_data:/app/data
+      - smxform_uploads:/app/uploads
+
+volumes:
+  smxform_data:
+  smxform_uploads:

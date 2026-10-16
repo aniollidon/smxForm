@@ -1,0 +1,16 @@
+# Git metadata
+.git
+.gitignore
+
+# Dependencies and build outputs
+**/node_modules
+client/dist
+
+# Local runtime/state
+server/.env
+server/prisma/dev.db
+uploads/*
+
+# Editor and logs
+.vscode
+*.log
