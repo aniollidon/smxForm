@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, fileUrl } from '../api';
 import { formatGrade } from '../formatGrade.js';
+import DrawingBoard from '../components/DrawingBoard.jsx';
 
 const defaultCriteria = 'Avalua l’exactitud, la pertinència i la completesa de la resposta respecte de l’enunciat i la resposta esperada. Assigna una puntuació proporcional als punts assolits i justifica-la breument.';
 
@@ -50,6 +51,11 @@ function AnswerValue({ answer, question }) {
       : <i>Sense resposta</i>;
   }
   if (answer.value == null || String(answer.value).trim() === '') return <i>Sense resposta</i>;
+  if (question.type === 'DRAWING') {
+    return answer.value.strokes?.length
+      ? <DrawingBoard src={fileUrl(question.imageUrl)} color={question.config.color} width={question.config.width} value={answer.value} readOnly />
+      : <i>Sense resposta</i>;
+  }
   return <>{String(answer.value)}</>;
 }
 
@@ -247,14 +253,14 @@ export default function QuestionReview() {
             >
               <header className="question-answer-header">
                 <div className="question-answer-student">
-                  {supportsAiGrading && (
+                  {(
                     <input
                       className="question-answer-select"
                       type="checkbox"
                       checked={selectedAnswerIds.includes(answer.id)}
-                      disabled={gradingWithAi || !(typeof answer.value === 'string' && answer.value.trim())}
-                      aria-label={`Selecciona la resposta de ${answer.attempt.user.name || answer.attempt.user.email} per a l’avaluació assistida`}
-                      title={typeof answer.value === 'string' && answer.value.trim() ? 'Selecciona resposta' : 'La resposta és buida'}
+                      disabled={gradingWithAi || (supportsAiGrading && !(typeof answer.value === 'string' && answer.value.trim()))}
+                      aria-label={`Selecciona la resposta de ${answer.attempt.user.name || answer.attempt.user.email}`}
+                      title="Selecciona resposta"
                       onChange={() => toggleAnswerSelection(answer.id)}
                     />
                   )}
@@ -269,7 +275,7 @@ export default function QuestionReview() {
                 </div>
               </header>
               <div className="question-answer-content"><AnswerValue answer={answer} question={data.question} /></div>
-              {gradingMode === 'manual' && selectedAnswerIds.includes(answer.id) && (
+              {(!supportsAiGrading || gradingMode === 'manual') && selectedAnswerIds.includes(answer.id) && (
                 <AnswerReviewForm answer={answer} question={data.question} onDone={() => answerSaved(answer.id)} />
               )}
             </article>

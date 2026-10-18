@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { emptyDraft, fromQuestion, toPayload } from '../src/questionModel.js';
+import { emptyDraft, fromQuestion, toPayload, validateDraft } from '../src/questionModel.js';
 
 test('new questions are required and shuffle options when supported', () => {
   for (const type of ['MCQ', 'MATCHING', 'ORDERING', 'IMAGE_LABEL']) {
@@ -33,4 +33,16 @@ test('partial credit is the default and all-or-nothing is preserved for eligible
     assert.equal(payload.answerKey.allOrNothing, true);
     assert.equal(fromQuestion({ ...payload, id: 1, config: payload.config, answerKey: payload.answerKey }).allOrNothing, true);
   }
+});
+
+test('calculated question drafts preserve list generation and legacy ranges', () => {
+  const draft = emptyDraft('CALCULATED');
+  draft.text = 'Valor {x}';
+  draft.vars = [{ name: 'x', mode: 'list', min: 1, max: 10, decimals: 0, values: '1,25\n2.5\n4' }];
+  draft.formula = '{x}';
+  assert.equal(validateDraft(draft), null);
+  assert.deepEqual(toPayload(draft).config.variables[0].values, [1.25, 2.5, 4]);
+
+  const legacy = fromQuestion({ ...toPayload({ ...draft, vars: [{ name: 'x', min: 1, max: 10, decimals: 0, values: '' }] }), id: 1 });
+  assert.equal(legacy.vars[0].mode, 'range');
 });

@@ -77,7 +77,7 @@ export default function PortableFormatDocs() {
           <Field name="maxAttempts">Enter d’1 a 100; per defecte <code>1</code>. Només s’aplica quan <code>allowRetry</code> és true.</Field>
           <Field name="negativePenalty">Nombre entre 0 i 1: fracció dels punts de la pregunta que es resten per una resposta incorrecta. <code>0</code> no resta; per defecte <code>0</code>.</Field>
           <Field name="gradeToExport"><code>BEST</code> (millor intent) o <code>LAST</code> (últim intent); per defecte <code>BEST</code>. S’aplica en exportar notes a Classroom quan l’entrega permet intents repetits; a l’editor, aquesta opció només apareix en activar <code>allowRetry</code>.</Field>
-          <Field name="showResults"><code>NONE</code> (no mostra resultats), <code>SCORE</code> (només nota) o <code>FULL</code> (nota, respostes i clau); per defecte <code>SCORE</code>.</Field>
+          <Field name="showResults"><code>NONE</code> (no mostra resultats), <code>SCORE</code> (només nota), <code>ANSWERS</code> (nota i respostes sense corregir) o <code>FULL</code> (nota, respostes i clau); per defecte <code>SCORE</code>.</Field>
           <Field name="showResultsFrom">Data/hora ISO 8601 amb zona horària, per exemple <code>2026-10-14T08:00:00.000Z</code>; amaga els resultats fins aquell moment. <code>null</code> o absència: sense retard.</Field>
         </tbody></table></div>
         <p>La importació sempre crea l’entrega com a esborrany no publicat. L’estat de publicació, l’enllaç públic, l’enllaç de Classroom i els intents no formen part del fitxer.</p>
@@ -125,10 +125,10 @@ export default function PortableFormatDocs() {
 
         <h3><code>CALCULATED</code> · Fórmula amb valors dinàmics</h3>
         <p>Pregunta amb resposta numèrica calculada, com el tipus «calculada» del Moodle. L’enunciat pot contenir variables entre claus (<code>{'{a}'}</code>) i càlculs (<code>{'{=2*{a}}'}</code>); cada alumne rep, a cada intent, un valor aleatori diferent per a cada variable, i veu l’enunciat ja substituït. Els valors són els mateixos durant tot l’intent i en la revisió. La previsualització en tria uns a l’atzar i es poden refrescar amb «Nous valors aleatoris».</p>
-        <p><code>variables</code> és una llista d’1 a 20 elements amb <code>name</code> (lletra inicial; lletres, xifres i «_»; fins a 20 caràcters), <code>min</code>, <code>max</code> (nombres amb <code>min</code> ≤ <code>max</code>) i <code>decimals</code> (enter de 0 a 10, per defecte 0). <code>formula</code> és la resposta correcta, que pot usar variables (<code>{'{a}'}</code>), nombres, parèntesis, els operadors <code>+ - * / % **</code> (també <code>^</code>) i les funcions <code>abs, acos, asin, atan, atan2, ceil, cos, deg2rad, exp, floor, log, log10, max, min, pow, rad2deg, round, sin, sqrt, tan</code> i <code>pi()</code>. Es verifica en desar i s’ha de poder calcular amb els rangs indicats.</p>
+        <p><code>variables</code> és una llista d’1 a 20 elements amb <code>name</code> (lletra inicial; lletres, xifres i «_»; fins a 20 caràcters) i un mode de generació. Si s’omet <code>mode</code>, s’utilitza <code>range</code> per mantenir la compatibilitat amb qüestionaris antics. El mode <code>range</code> usa <code>min</code>, <code>max</code> i <code>decimals</code> (enter de 0 a 10, per defecte 0); el mode <code>list</code> usa <code>values</code>, una llista d’1 a 100 nombres possibles. A l’editor, els valors de la llista s’escriuen un per línia i s’hi admet coma o punt decimal. A cada intent se n’escull un a l’atzar; s’utilitza tal qual, sense arrodonir-lo. <code>formula</code> és la resposta correcta, que pot usar variables (<code>{'{a}'}</code>), nombres, parèntesis, els operadors <code>+ - * / % **</code> (també <code>^</code>) i les funcions <code>abs, acos, asin, atan, atan2, ceil, cos, deg2rad, exp, floor, log, log10, max, min, pow, rad2deg, round, sin, sqrt, tan</code> i <code>pi()</code>. Es verifica en desar i s’ha de poder calcular amb els valors indicats.</p>
         <p><code>tolerance</code> (nombre ≥ 0, per defecte 0) i <code>toleranceType</code> defineixen el marge acceptat: <code>nominal</code> accepta qualsevol valor a una distància màxima de <code>tolerance</code> de la resposta correcta; <code>relative</code> l’accepta si la diferència no supera <code>tolerance</code> multiplicat pel valor absolut de la resposta correcta (<code>0.01</code> = 1%). L’alumne pot escriure la resposta amb punt o coma decimal. La pregunta es corregeix automàticament i no té correcció manual; en reavaluar, es recalcula amb els mateixos valors de cada intent.</p>
         <pre><code>{`"type": "CALCULATED", "text": "Un cotxe fa {d} km en {t} h. Velocitat mitjana (km/h)?",
-"variables": [{"name": "d", "min": 100, "max": 200, "decimals": 0}, {"name": "t", "min": 2, "max": 4, "decimals": 1}],
+"variables": [{"name": "d", "min": 100, "max": 200, "decimals": 0}, {"name": "t", "mode": "list", "values": [2, 2.5, 3, 4]}],
 "formula": "{d}/{t}", "tolerance": 0.01, "toleranceType": "nominal"`}</code></pre>
 
         <h3><code>LONG_TEXT</code> · Resposta llarga de correcció manual</h3>
@@ -138,6 +138,10 @@ export default function PortableFormatDocs() {
         <h3><code>IMAGE_UPLOAD</code> · Lliurament d’una imatge</h3>
         <p>No té cap camp específic. L’alumne adjunta una imatge i el professorat la corregeix manualment. No confongueu aquest tipus amb <code>image</code>, que és una imatge de context de la pregunta.</p>
         <pre><code>{`"type": "IMAGE_UPLOAD"`}</code></pre>
+
+        <h3><code>DRAWING</code> · Dibuix sobre una imatge</h3>
+        <p>Cal <code>image</code> com a imatge base. L’alumne dibuixa amb un llapis i una goma; el professorat el corregeix manualment. <code>color</code> (#rrggbb) i <code>width</code> (1-40) són opcionals.</p>
+        <pre><code>{`"type": "DRAWING", "color": "#e11d48", "width": 4`}</code></pre>
 
         <h2>Document complet d’exemple</h2>
         <p>Aquest és un fitxer importable amb la configuració mínima explícita i dues preguntes. Es pot desar com a <code>.json</code> en UTF-8.</p>

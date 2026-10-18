@@ -1,12 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '../api';
-import { fileUrl } from '../api';
+import { api, fileUrl, upload } from '../api';
 import QuestionEditor from '../components/QuestionEditor.jsx';
 import FormatMenu from '../components/FormatMenu.jsx';
 import { TYPE_LABELS, emptyDraft, fromQuestion } from '../questionModel';
-import { blobToDataUri, exportQuiz } from '../portableQuiz.js';
+import { blobToDataUri, dataUriToFile, exportQuiz, parsePortableQuestions } from '../portableQuiz.js';
+import { toPayload } from '../questionModel.js';
 import { formatGrade } from '../formatGrade.js';
 import { usePrompt } from '../components/PromptProvider.jsx';
 
@@ -63,6 +63,7 @@ function Settings({ quiz, onSaved }) {
           <select value={f.showResults} onChange={(e) => set({ showResults: e.target.value })}>
             <option value="NONE">Res</option>
             <option value="SCORE">Només la nota</option>
+            <option value="ANSWERS">Nota i respostes sense corregir</option>
             <option value="FULL">Nota i respostes correctes</option>
           </select>
         </label>
@@ -158,6 +159,9 @@ export default function QuizEditor() {
   const [editing, setEditing] = useState(null); // draft o null
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState('');
+  const [importBusy, setImportBusy] = useState(false);
+  const [importMessage, setImportMessage] = useState('');
+  const importInput = useRef(null);
   const [gradeAction, setGradeAction] = useState('');
   const [gradeMessage, setGradeMessage] = useState('');
   const refresh = () => qc.invalidateQueries({ queryKey: ['quiz-edit', id] });
@@ -202,6 +206,33 @@ export default function QuizEditor() {
       setExportError(error.message);
     } finally {
       setExporting(false);
+    }
+  };
+
+  const importQuestions = async (file) => {
+    setImportBusy(true);
+    setImportMessage('');
+    try {
+      if (file.size > 50 * 1024 * 1024) throw new Error('El fitxer no pot superar els 50 MiB.');
+      const drafts = parsePortableQuestions(JSON.parse(await file.text()));
+      let done = 0;
+      try {
+        for (const draft of drafts) {
+          const imageUrl = draft.image ? (await upload('/api/files/question-image', dataUriToFile(draft.image))).imageUrl : null;
+          await api(`/api/teacher/quizzes/${id}/questions`, { method: 'POST', body: toPayload({ ...draft, imageUrl }) });
+          done += 1;
+        }
+      } catch (error) {
+        throw new Error(`${error.message} (s’han importat ${done} de ${drafts.length} preguntes).`);
+      } finally {
+        refresh();
+      }
+      setImportMessage(`${drafts.length} preguntes importades.`);
+    } catch (error) {
+      setImportMessage(error.message || 'No s’ha pogut importar el fitxer.');
+    } finally {
+      setImportBusy(false);
+      if (importInput.current) importInput.current.value = '';
     }
   };
 
@@ -289,7 +320,7 @@ export default function QuizEditor() {
               <div className="review-question-title"><span className="review-question-number">{String(i + 1).padStart(2, '0')}</span><span className="quiz-question-prompt">{q.text.slice(0, 100)} <span className="muted">({formatGrade(q.points)} pt{q.required ? ', obligatòria' : ''})</span></span></div>
             </div>
             <div className="row quiz-question-actions">
-              {['SHORT_TEXT', 'LONG_TEXT', 'IMAGE_UPLOAD'].includes(q.type) && <Link className="question-answer-shortcut" to={`/t/quiz/${id}/question/${q.id}/answers`}>Veure respostes ↗</Link>}
+              {['SHORT_TEXT', 'LONG_TEXT', 'IMAGE_UPLOAD', 'DRAWING'].includes(q.type) && <Link className="question-answer-shortcut" to={`/t/quiz/${id}/question/${q.id}/answers`}>Veure respostes ↗</Link>}
               <button className="secondary" disabled={i === 0} onClick={() => move(i, -1)}>↑</button>
               <button className="secondary" disabled={i === quiz.questions.length - 1} onClick={() => move(i, 1)}>↓</button>
               <button className="secondary" onClick={() => setEditing(fromQuestion(q))}>Edita</button>
@@ -304,6 +335,11 @@ export default function QuizEditor() {
           <strong>Afegeix una pregunta</strong>
           <div className="row">
           {Object.entries(TYPE_LABELS).map(([t, l]) => <button key={t} className="secondary" onClick={() => setEditing(emptyDraft(t))}>{l}</button>)}
+          </div>
+          <div className="row">
+            <button className="secondary" disabled={importBusy} onClick={() => importInput.current?.click()}>{importBusy ? 'Important…' : 'Importa de JSON'}</button>
+            <input ref={importInput} className="visually-hidden" type="file" accept=".json,application/json" tabIndex={-1} aria-label="Fitxer JSON de preguntes" onChange={(event) => event.target.files[0] && importQuestions(event.target.files[0])} />
+            {importMessage && <span className="muted">{importMessage}</span>}
           </div>
         </div>
       )}

@@ -15,7 +15,7 @@ router.use(requireTeacher);
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 const fail = (status, msg) => Object.assign(new Error(msg), { status });
 
-const TYPES = ['MCQ', 'TRUE_FALSE', 'MATCHING', 'ORDERING', 'IMAGE_LABEL', 'SHORT_TEXT', 'LONG_TEXT', 'IMAGE_UPLOAD', 'CALCULATED'];
+const TYPES = ['MCQ', 'TRUE_FALSE', 'MATCHING', 'ORDERING', 'IMAGE_LABEL', 'SHORT_TEXT', 'LONG_TEXT', 'IMAGE_UPLOAD', 'CALCULATED', 'DRAWING'];
 const id = z.union([z.string(), z.number()]).transform(String);
 const item = z.object({ id, text: z.string().max(500) });
 const clipboardConfig = { allowClipboard: z.boolean().default(false) };
@@ -34,14 +34,24 @@ const configSchemas = {
   CALCULATED: z.object({
     variables: z.array(z.object({
       name: z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,19}$/),
-      min: z.number().finite(),
-      max: z.number().finite(),
+      mode: z.enum(['range', 'list']).default('range'),
+      min: z.number().finite().optional(),
+      max: z.number().finite().optional(),
       decimals: z.number().int().min(0).max(10).default(0),
-    })).min(1).max(20),
+      values: z.array(z.number().finite()).max(100).default([]),
+    }).superRefine((variable, ctx) => {
+      if (variable.mode === 'range' && (variable.min === undefined || variable.max === undefined)) {
+        ctx.addIssue({ code: 'custom', message: 'El rang necessita mínim i màxim' });
+      }
+      if (variable.mode === 'list' && !variable.values.length) {
+        ctx.addIssue({ code: 'custom', message: 'La llista necessita almenys un valor' });
+      }
+    }).transform((variable) => ({ ...variable, min: variable.min ?? 0, max: variable.max ?? 0 }))).min(1).max(20),
     ...clipboardConfig,
   }),
   LONG_TEXT: z.object(clipboardConfig).passthrough(),
   IMAGE_UPLOAD: z.object(clipboardConfig).passthrough(),
+  DRAWING: z.object({ color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#e11d48'), width: z.number().min(1).max(40).default(4), ...clipboardConfig }),
 };
 const keySchemas = {
   MCQ: z.object({ correct: z.array(id).min(1), allOrNothing: z.boolean().optional() }),
@@ -57,6 +67,7 @@ const keySchemas = {
   }),
   LONG_TEXT: z.object({ reference: z.string().optional() }).passthrough(),
   IMAGE_UPLOAD: z.object({}).passthrough(),
+  DRAWING: z.object({}).passthrough(),
 };
 
 const questionSchema = z.object({
@@ -83,6 +94,7 @@ function parseQuestion(body) {
     const ids = new Set(q.config.items.map((entry) => entry.id));
     if (ids.size !== q.config.items.length || q.answerKey.order.length !== ids.size || !q.answerKey.order.every((entryId) => ids.has(entryId)) || new Set(q.answerKey.order).size !== ids.size) throw fail(400, 'Ordre invàlid');
   }
+  if (q.type === 'DRAWING' && !q.imageUrl) throw fail(400, 'Cal una imatge base per dibuixar');
   if (q.type === 'CALCULATED') {
     const error = validateDefinition(q.text, q.config, q.answerKey);
     if (error) throw fail(400, error);
@@ -103,7 +115,7 @@ const quizSchema = z.object({
   maxAttempts: z.number().int().min(1).max(100).default(1),
   negativePenalty: z.number().min(0).max(1).default(0),
   gradeToExport: z.enum(['BEST', 'LAST']).default('BEST'),
-  showResults: z.enum(['NONE', 'SCORE', 'FULL']).default('SCORE'),
+  showResults: z.enum(['NONE', 'SCORE', 'FULL', 'ANSWERS']).default('SCORE'),
   showResultsFrom: z.string().datetime().nullable().optional(),
   published: z.boolean().default(true),
 });
@@ -323,7 +335,7 @@ router.delete('/attempts/:aid', wrap(async (req, res) => {
 
 router.get('/questions/:qid/answers', wrap(async (req, res) => {
   const question = await ownQuestion(req);
-  if (!['SHORT_TEXT', 'LONG_TEXT', 'IMAGE_UPLOAD'].includes(question.type)) throw fail(400, 'Aquesta pregunta no té correcció manual');
+  if (!['SHORT_TEXT', 'LONG_TEXT', 'IMAGE_UPLOAD', 'DRAWING'].includes(question.type)) throw fail(400, 'Aquesta pregunta no té correcció manual');
   const answers = await prisma.answer.findMany({
     where: { questionId: question.id, attempt: { status: { not: 'IN_PROGRESS' } } },
     include: { attempt: { include: { user: { select: { name: true, email: true } } } } },

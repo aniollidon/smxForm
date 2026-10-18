@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { upload, fileUrl } from '../api';
 import { ImageWithPoints } from './QuestionInput.jsx';
+import DrawingBoard from './DrawingBoard.jsx';
 import { TYPE_LABELS, uid, toPayload, validateDraft } from '../questionModel';
 
 export default function QuestionEditor({ initial, onSave, onCancel }) {
@@ -53,7 +54,7 @@ export default function QuestionEditor({ initial, onSave, onCancel }) {
         )}
       </div>
 
-      {d.type !== 'IMAGE_LABEL' && d.type !== 'IMAGE_UPLOAD' && (
+      {d.type !== 'IMAGE_LABEL' && d.type !== 'IMAGE_UPLOAD' && d.type !== 'DRAWING' && (
         <div>
           <label>Imatge (opcional) <input type="file" accept="image/*" onChange={(e) => e.target.files[0] && uploadImage(e.target.files[0])} /></label>
           {d.imageUrl && <img src={fileUrl(d.imageUrl)} alt="" style={{ maxWidth: 200 }} />}
@@ -151,20 +152,30 @@ export default function QuestionEditor({ initial, onSave, onCancel }) {
 
       {d.type === 'CALCULATED' && (
         <div className="stack">
-          <p className="muted">Usa variables a l’enunciat amb claus, p. ex. {'{a}'}; cada alumne en rep un valor aleatori dins del rang. També pots escriure càlculs a l’enunciat amb {'{=2*{a}}'}.</p>
+          <p className="muted">Usa variables a l’enunciat amb claus, p. ex. {'{a}'}; cada alumne en rep un valor aleatori del rang o de la llista. També pots escriure càlculs a l’enunciat amb {'{=2*{a}}'}.</p>
           {d.vars.map((v, i) => {
             const setVar = (patch) => set({ vars: d.vars.map((x, j) => (j === i ? { ...x, ...patch } : x)) });
             return (
               <div className="row" key={i}>
                 <label>Variable {'{ }'} <input type="text" style={{ width: 90 }} value={v.name} onChange={(e) => setVar({ name: e.target.value })} /></label>
-                <label>Mínim <input type="number" step="any" style={{ width: 100 }} value={v.min} onChange={(e) => setVar({ min: e.target.value })} /></label>
-                <label>Màxim <input type="number" step="any" style={{ width: 100 }} value={v.max} onChange={(e) => setVar({ max: e.target.value })} /></label>
-                <label>Decimals <input type="number" min="0" max="10" style={{ width: 70 }} value={v.decimals} onChange={(e) => setVar({ decimals: e.target.value })} /></label>
+                <label>Generació <select value={v.mode || 'range'} onChange={(e) => setVar({ mode: e.target.value })}>
+                  <option value="range">Rang</option>
+                  <option value="list">Llista</option>
+                </select></label>
+                {v.mode === 'list' ? (
+                  <label>Valors possibles (un per línia)<textarea rows="3" placeholder={'1\n2,5\n4'} value={v.values || ''} onChange={(e) => setVar({ values: e.target.value })} /></label>
+                ) : (
+                  <>
+                    <label>Mínim <input type="number" step="any" style={{ width: 100 }} value={v.min} onChange={(e) => setVar({ min: e.target.value })} /></label>
+                    <label>Màxim <input type="number" step="any" style={{ width: 100 }} value={v.max} onChange={(e) => setVar({ max: e.target.value })} /></label>
+                    <label>Decimals <input type="number" min="0" max="10" style={{ width: 70 }} value={v.decimals} onChange={(e) => setVar({ decimals: e.target.value })} /></label>
+                  </>
+                )}
                 {d.vars.length > 1 && <button className="secondary" onClick={() => set({ vars: d.vars.filter((_, j) => j !== i) })}>✕</button>}
               </div>
             );
           })}
-          {d.vars.length < 20 && <button className="secondary" onClick={() => set({ vars: [...d.vars, { name: '', min: 1, max: 10, decimals: 0 }] })}>+ Variable</button>}
+          {d.vars.length < 20 && <button className="secondary" onClick={() => set({ vars: [...d.vars, { name: '', mode: 'range', min: 1, max: 10, decimals: 0, values: '' }] })}>+ Variable</button>}
           <label>Fórmula de la resposta correcta (p. ex. {'{a}*{b}/2'}; admet + - * / % ** i funcions com sqrt, pow, abs, round, sin, cos, log, pi)
             <input type="text" maxLength={500} value={d.formula} onChange={(e) => set({ formula: e.target.value })} />
           </label>
@@ -181,11 +192,23 @@ export default function QuestionEditor({ initial, onSave, onCancel }) {
         </div>
       )}
 
+      {d.type === 'DRAWING' && (
+        <div className="stack">
+          <label>Imatge base <input type="file" accept="image/*" onChange={(e) => e.target.files[0] && uploadImage(e.target.files[0])} /></label>
+          <div className="row">
+            <label>Color del traç <input type="color" value={d.color} onChange={(e) => set({ color: e.target.value })} /></label>
+            <label>Mida del traç ({d.width}) <input type="range" min="1" max="40" value={d.width} onChange={(e) => set({ width: Number(e.target.value) })} /></label>
+          </div>
+          {d.imageUrl && <DrawingBoard src={fileUrl(d.imageUrl)} color={d.color} width={d.width} value={d.sample} onChange={(v) => set({ sample: v })} />}
+          <p className="muted">Prova el traç sobre la imatge (no es desa).</p>
+        </div>
+      )}
+
       {d.type === 'LONG_TEXT' && (
         <label>Resposta de referència (per al corrector)<textarea value={d.reference} onChange={(e) => set({ reference: e.target.value })} /></label>
       )}
       {d.type === 'SHORT_TEXT' && <p className="muted">S’autoavalua; el professor pot revisar i ajustar la puntuació manualment si cal.</p>}
-      {(d.type === 'LONG_TEXT' || d.type === 'IMAGE_UPLOAD') && <p className="muted">Aquesta pregunta es corregeix manualment.</p>}
+      {(d.type === 'LONG_TEXT' || d.type === 'IMAGE_UPLOAD' || d.type === 'DRAWING') && <p className="muted">Aquesta pregunta es corregeix manualment.</p>}
 
       {err && <p className="error">{err}</p>}
       <div className="row">

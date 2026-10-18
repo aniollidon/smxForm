@@ -236,6 +236,7 @@ tr:last-child td { border-bottom: 0; }
 
 .imgwrap { position: relative; display: inline-block; max-width: 100%; overflow: hidden; border: 1px solid #484848; background: #303030; }
 .imgwrap img { display: block; max-width: 100%; }
+.review-answer .imgwrap.drawing-board img, .question-answer-content .imgwrap.drawing-board img { max-width: 100%; max-height: none; object-fit: fill; }
 .marker { position: absolute; display: flex; width: 25px; height: 25px; align-items: center; justify-content: center; border: 1px solid white; border-radius: 50%; background: var(--blue); color: #fff; font-family: var(--mono); font-size: 11px; box-shadow: 0 2px 8px rgba(0,0,0,.28); transform: translate(-50%, -50%); }
 
 .result-heading { align-items: flex-start; }

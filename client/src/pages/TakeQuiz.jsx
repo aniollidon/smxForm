@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, fileUrl } from '../api';
 import QuestionInput, { ImageWithPoints } from '../components/QuestionInput.jsx';
+import DrawingBoard from '../components/DrawingBoard.jsx';
 import { formatGrade } from '../formatGrade.js';
 import { usePrompt } from '../components/PromptProvider.jsx';
 
@@ -15,7 +16,34 @@ function AnswerBlock({ label, children, tone }) {
   );
 }
 
+function PlainAnswer({ q, value }) {
+  const text = (list, id) => q.config?.[list]?.find((x) => x.id === id)?.text ?? id;
+  switch (q.type) {
+    case 'MCQ': return (Array.isArray(value) ? value : []).map((v) => text('options', v)).join(', ');
+    case 'TRUE_FALSE': return value == null ? null : value ? 'Cert' : 'Fals';
+    case 'MATCHING': return value ? <ul>{Object.entries(value).map(([l, r]) => <li key={l}>{text('left', l)} → {text('right', r)}</li>)}</ul> : null;
+    case 'ORDERING': return Array.isArray(value) ? <ol>{value.map((id) => <li key={id}>{text('items', id)}</li>)}</ol> : null;
+    case 'IMAGE_LABEL': return (
+      <div className="answer-image-labels">
+        {q.imageUrl && <ImageWithPoints src={fileUrl(q.imageUrl)} points={q.config?.points || []} />}
+        <ul>{(q.config?.points || []).map((p, i) => <li key={p.id}>{i + 1}: {value?.[p.id] || '—'}</li>)}</ul>
+      </div>
+    );
+    case 'IMAGE_UPLOAD': return q.fileUrl ? <img className="answer-upload" src={fileUrl(q.fileUrl)} alt="Imatge enviada per l’alumne" /> : null;
+    case 'DRAWING': return value?.strokes?.length ? <DrawingBoard src={fileUrl(q.imageUrl)} color={q.config?.color} width={q.config?.width} value={value} readOnly /> : null;
+    default: return value == null ? null : String(value);
+  }
+}
+
 function QuestionResult({ q, index }) {
+  if (!q.answerKey) {
+    return (
+      <div className="card stack result-question">
+        <div className="review-question-title"><span className="review-question-number">{String(index + 1).padStart(2, '0')}</span><b>{q.text}</b></div>
+        <AnswerBlock label="La teva resposta"><PlainAnswer q={q} value={q.value} /></AnswerBlock>
+      </div>
+    );
+  }
   const value = q.value;
   const key = q.answerKey || {};
   const options = q.config?.options || [];
@@ -138,6 +166,9 @@ function QuestionResult({ q, index }) {
       answers = q.fileUrl
         ? <AnswerBlock label="Imatge enviada"><img className="answer-upload" src={fileUrl(q.fileUrl)} alt="Imatge enviada per l’alumne" /></AnswerBlock>
         : <AnswerBlock label="Resposta">{value ? 'Imatge enviada' : null}</AnswerBlock>;
+      break;
+    case 'DRAWING':
+      answers = <AnswerBlock label="El teu dibuix">{value?.strokes?.length ? <DrawingBoard src={fileUrl(q.imageUrl)} color={q.config?.color} width={q.config?.width} value={value} readOnly /> : null}</AnswerBlock>;
       break;
     default:
       answers = <AnswerBlock label="La teva resposta">{value == null ? null : String(value)}</AnswerBlock>;
@@ -277,7 +308,7 @@ export default function TakeQuiz() {
               <div className="review-question-text"><b>{q.text}</b> {q.required && <span className="error">*</span>} <span className="muted">({formatGrade(q.points)} pt)</span></div>
             </div>
           </div>
-          {q.type !== 'IMAGE_LABEL' && q.imageUrl && <img src={`/api/files/${q.imageUrl}`} alt="" style={{ maxWidth: '100%' }} />}
+          {q.type !== 'IMAGE_LABEL' && q.type !== 'DRAWING' && q.imageUrl && <img src={`/api/files/${q.imageUrl}`} alt="" style={{ maxWidth: '100%' }} />}
           <div className="question-response">
             <QuestionInput
               q={q}

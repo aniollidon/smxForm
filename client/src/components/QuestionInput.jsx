@@ -1,6 +1,7 @@
 import React from 'react';
 import { fileUrl, upload } from '../api';
 import { usePrompt } from './PromptProvider.jsx';
+import DrawingBoard from './DrawingBoard.jsx';
 
 export function ImageWithPoints({ src, points = [], onClick }) {
   return (
@@ -154,6 +155,8 @@ export default function QuestionInput({ q, value, onChange, attemptId, fileName,
           {pasteWarning('answer')}
         </div>
       );
+    case 'DRAWING':
+      return <DrawingBoard src={fileUrl(q.imageUrl)} color={c.color} width={c.width} value={value} onChange={onChange} readOnly={disabled} />;
     case 'IMAGE_UPLOAD':
       return (
         <div className="stack">

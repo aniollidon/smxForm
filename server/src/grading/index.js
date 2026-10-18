@@ -1,7 +1,7 @@
 const { rng } = require('./rng');
 const { gradeCalculated } = require('./calculated');
 
-const MANUAL_TYPES = ['LONG_TEXT', 'IMAGE_UPLOAD'];
+const MANUAL_TYPES = ['LONG_TEXT', 'IMAGE_UPLOAD', 'DRAWING'];
 
 const norm = (s) =>
   String(s ?? '')
@@ -28,6 +28,8 @@ function isAnswered(type, value) {
       return String(value).trim() !== '';
     case 'IMAGE_UPLOAD':
       return !!value;
+    case 'DRAWING':
+      return Array.isArray(value?.strokes) && value.strokes.length > 0;
     default:
       return false;
   }

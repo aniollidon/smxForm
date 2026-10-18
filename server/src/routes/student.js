@@ -56,7 +56,9 @@ function attemptResult(attempt, quiz, questions, answers) {
   if (!base.visible) return base;
   base.score = attempt.score;
   base.maxScore = quiz.maxScore;
-  if (quiz.showResults === 'FULL') {
+  if (quiz.showResults === 'FULL' || quiz.showResults === 'ANSWERS') {
+    const corrected = quiz.showResults === 'FULL';
+    base.corrected = corrected;
     const byQ = new Map(answers.map((a) => [a.questionId, a]));
     base.questions = questions.map((q) => {
       const a = byQ.get(q.id);
@@ -68,11 +70,11 @@ function attemptResult(attempt, quiz, questions, answers) {
         points: q.points,
         imageUrl: q.imageUrl,
         config: pq.config,
-        answerKey: pq.answerKey,
+        answerKey: corrected ? pq.answerKey : null,
         value: a ? JSON.parse(a.value) : null,
         fileUrl: a?.fileUrl ?? null,
-        score: a?.score ?? null,
-        feedback: a?.feedback ?? null,
+        score: corrected ? a?.score ?? null : null,
+        feedback: corrected ? a?.feedback ?? null : null,
       };
     });
   }
@@ -163,8 +165,13 @@ router.put('/attempts/:aid/answers/:qid', wrap(async (req, res) => {
   if (!q) throw fail(404, 'Pregunta no trobada');
   if (q.type === 'IMAGE_UPLOAD') throw fail(400, 'Usa la pujada de fitxer');
   const { value } = z.object({ value: z.any() }).parse(req.body);
+  if (q.type === 'DRAWING') {
+    const ok = value === null || (Array.isArray(value?.strokes) && value.strokes.length <= 500
+      && value.strokes.every((s) => Array.isArray(s) && s.length >= 2 && s.length <= 4000 && s.every((n) => Number.isFinite(n))));
+    if (!ok) throw fail(400, 'Dibuix invàlid');
+  }
   const json = JSON.stringify(value ?? null);
-  if (json.length > 20000) throw fail(413, 'Resposta massa llarga');
+  if (json.length > (q.type === 'DRAWING' ? 150000 : 20000)) throw fail(413, 'Resposta massa llarga');
   await prisma.answer.upsert({
     where: { attemptId_questionId: { attemptId: a.id, questionId: q.id } },
     update: { value: json },

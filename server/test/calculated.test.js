@@ -29,6 +29,21 @@ test('instantiation is deterministic per seed, within ranges, and varies between
   assert.ok(new Set([1, 2, 3, 4, 5, 6].map((s) => instantiate(question, s).text)).size > 1);
 });
 
+test('list variables choose a configured value without rounding', () => {
+  const listed = {
+    ...question,
+    config: { variables: [{ name: 'x', mode: 'list', min: 0, max: 0, decimals: 0, values: [1.25, 2.75, 4] }] },
+    text: 'Valor {x}',
+    answerKey: { formula: '{x}' },
+  };
+  const first = instantiate(listed, 123);
+  assert.deepEqual(instantiate(listed, 123), first);
+  assert.ok([1.25, 2.75, 4].includes(first.values.x));
+  assert.equal(first.text, `Valor ${first.values.x}`);
+  assert.equal(validateDefinition(listed.text, listed.config, listed.answerKey), null);
+  assert.match(validateDefinition('x', { variables: [{ name: 'x', mode: 'list', values: [] }] }, { formula: '{x}' }), /Llista invàlida/);
+});
+
 test('grades numeric answers with tolerance and decimal comma', () => {
   const { expected } = instantiate(question, 77);
   const grade = (v) => scoreQuestion({ ...question, seed: 77 }, v).score;

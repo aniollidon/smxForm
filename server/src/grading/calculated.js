@@ -128,13 +128,17 @@ function generateValues(variables, seed, salt) {
   const r = rng(seed + salt * 7919);
   const values = {};
   for (const v of variables) {
-    const raw = v.min + r() * (v.max - v.min);
-    values[v.name] = Math.min(v.max, Math.max(v.min, Number(raw.toFixed(v.decimals))));
+    if (v.mode === 'list') {
+      values[v.name] = v.values[Math.floor(r() * v.values.length)];
+    } else {
+      const raw = v.min + r() * (v.max - v.min);
+      values[v.name] = Math.min(v.max, Math.max(v.min, Number(raw.toFixed(v.decimals))));
+    }
   }
   return values;
 }
 
-const fmtValue = (variable, n) => n.toFixed(variable.decimals);
+const fmtValue = (variable, n) => (variable.mode === 'list' ? String(n) : n.toFixed(variable.decimals));
 
 function renderText(text, variables, values) {
   const byName = new Map(variables.map((v) => [v.name, v]));
@@ -202,7 +206,9 @@ function validateDefinition(text, config, key) {
     if (!NAME.test(v.name)) return `Nom de variable invàlid: «${v.name}»`;
     if (names.has(v.name)) return `Variable repetida: «${v.name}»`;
     names.add(v.name);
-    if (v.min > v.max) return `Rang invàlid a {${v.name}}: el mínim supera el màxim`;
+    if (v.mode === 'list') {
+      if (!Array.isArray(v.values) || v.values.length < 1 || v.values.length > 100 || !v.values.every(Number.isFinite)) return `Llista invàlida a {${v.name}}: indica d'1 a 100 nombres`;
+    } else if (v.min > v.max) return `Rang invàlid a {${v.name}}: el mínim supera el màxim`;
   }
   if (!key.formula || !key.formula.trim()) return 'Indica la fórmula de la resposta';
   try {

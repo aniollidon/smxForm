@@ -30,7 +30,7 @@ model Quiz {
   maxAttempts           Int        @default(1)
   negativePenalty       Float      @default(0) // fracció de punts de la pregunta que resta cada error (0 = no resta)
   gradeToExport         String     @default("BEST") // BEST | LAST
-  showResults           String     @default("SCORE") // NONE | SCORE | FULL
+  showResults           String     @default("SCORE") // NONE | SCORE | FULL | ANSWERS
   showResultsFrom       DateTime? // si està definit, els resultats només es veuen a partir d'aquesta data
   published             Boolean    @default(true)
   publicSlug            String     @unique

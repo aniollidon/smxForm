@@ -11,6 +11,7 @@ export const TYPE_LABELS = {
   CALCULATED: 'Fórmula',
   LONG_TEXT: 'Text llarg',
   IMAGE_UPLOAD: 'Pujar imatge',
+  DRAWING: 'Dibuixar sobre imatge',
 };
 
 const lines = (s) => s.split('\n').map((x) => x.trim()).filter(Boolean);
@@ -31,9 +32,11 @@ export function emptyDraft(type) {
     case 'SHORT_TEXT':
       return { ...base, accepted: '', regex: '' };
     case 'CALCULATED':
-      return { ...base, vars: [{ name: 'a', min: 1, max: 10, decimals: 0 }], formula: '', tolerance: 0, toleranceType: 'nominal' };
+      return { ...base, vars: [{ name: 'a', mode: 'range', min: 1, max: 10, decimals: 0, values: '' }], formula: '', tolerance: 0, toleranceType: 'nominal' };
     case 'LONG_TEXT':
       return { ...base, reference: '' };
+    case 'DRAWING':
+      return { ...base, color: '#e11d48', width: 4 };
     default:
       return base;
   }
@@ -73,8 +76,10 @@ export function fromQuestion(q) {
       return { ...base, accepted: (k.accepted || []).join('\n'), regex: k.regex || '' };
     case 'LONG_TEXT':
       return { ...base, reference: k.reference || '' };
+    case 'DRAWING':
+      return { ...base, color: c.color || '#e11d48', width: c.width || 4 };
     case 'CALCULATED':
-      return { ...base, vars: c.variables.map((v) => ({ ...v })), formula: k.formula || '', tolerance: k.tolerance ?? 0, toleranceType: k.toleranceType || 'nominal' };
+      return { ...base, vars: c.variables.map((v) => ({ ...v, mode: v.mode || 'range', values: (v.values || []).join('\n') })), formula: k.formula || '', tolerance: k.tolerance ?? 0, toleranceType: k.toleranceType || 'nominal' };
     default:
       return base;
   }
@@ -116,8 +121,14 @@ export function toPayload(d) {
     case 'LONG_TEXT':
       p.answerKey = { reference: d.reference };
       break;
+    case 'DRAWING':
+      p.config = { color: d.color, width: Number(d.width) };
+      break;
     case 'CALCULATED':
-      p.config = { variables: d.vars.map((v) => ({ name: v.name.trim(), min: Number(v.min), max: Number(v.max), decimals: Number(v.decimals) })) };
+      p.config = { variables: d.vars.map((v) => ({
+        name: v.name.trim(), mode: v.mode || 'range', min: Number(v.min), max: Number(v.max), decimals: Number(v.decimals),
+        ...(v.mode === 'list' ? { values: lines(v.values).map((value) => Number(value.replace(',', '.'))) } : {}),
+      })) };
       p.answerKey = { formula: d.formula.trim(), tolerance: Number(d.tolerance) || 0, toleranceType: d.toleranceType };
       break;
   }
@@ -144,6 +155,10 @@ export function validateDraft(d) {
       if (!d.points_.length) return 'Clica sobre la imatge per afegir punts';
       if (d.points_.some((x) => !x.label.trim())) return 'Cada punt necessita una etiqueta';
       break;
+    case 'DRAWING':
+      if (!d.imageUrl) return 'Puja una imatge base';
+      if (!/^#[0-9a-fA-F]{6}$/.test(d.color) || !(Number(d.width) >= 1 && Number(d.width) <= 40)) return 'Color o mida del traç invàlids';
+      break;
     case 'SHORT_TEXT':
       if (!lines(d.accepted).length && !d.regex) return 'Indica almenys una resposta acceptada';
       break;
@@ -154,9 +169,15 @@ export function validateDraft(d) {
         if (!/^[A-Za-z][A-Za-z0-9_]{0,19}$/.test(v.name.trim())) return `Nom de variable invàlid: «${v.name}»`;
         if (names.has(v.name.trim())) return `Variable repetida: «${v.name}»`;
         names.add(v.name.trim());
-        if (![v.min, v.max].every((n) => v.min !== '' && v.max !== '' && Number.isFinite(Number(n)))) return `Rang invàlid a {${v.name}}`;
-        if (Number(v.min) > Number(v.max)) return `A {${v.name}} el mínim supera el màxim`;
-        if (!Number.isInteger(Number(v.decimals)) || v.decimals < 0 || v.decimals > 10) return `Decimals invàlids a {${v.name}}`;
+        if (!['range', 'list'].includes(v.mode || 'range')) return `Mode de generació invàlid a {${v.name}}`;
+        if (v.mode === 'list') {
+          const values = lines(v.values);
+          if (!values.length || values.length > 100 || values.some((value) => !Number.isFinite(Number(value.replace(',', '.'))))) return `Llista invàlida a {${v.name}}: indica d'1 a 100 nombres`;
+        } else {
+          if (![v.min, v.max].every((n) => v.min !== '' && v.max !== '' && Number.isFinite(Number(n)))) return `Rang invàlid a {${v.name}}`;
+          if (Number(v.min) > Number(v.max)) return `A {${v.name}} el mínim supera el màxim`;
+          if (!Number.isInteger(Number(v.decimals)) || v.decimals < 0 || v.decimals > 10) return `Decimals invàlids a {${v.name}}`;
+        }
       }
       if (!d.formula.trim()) return 'Indica la fórmula de la resposta';
       if (!(Number(d.tolerance) >= 0)) return 'Tolerància invàlida';

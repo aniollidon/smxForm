@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, fileUrl } from '../api';
 import { ImageWithPoints } from '../components/QuestionInput.jsx';
+import DrawingBoard from '../components/DrawingBoard.jsx';
 import { formatGrade } from '../formatGrade.js';
 
 const optText = (q, list, id) => q.config[list].find((x) => x.id === id)?.text ?? id;
@@ -12,6 +13,7 @@ function Value({ a }) {
   if (q.type === 'IMAGE_UPLOAD') return a.fileUrl ? <img src={fileUrl(a.fileUrl)} alt="" style={{ maxWidth: 400 }} /> : <i>Sense resposta</i>;
   if (value == null || value === '') return <i>Sense resposta</i>;
   switch (q.type) {
+    case 'DRAWING': return <DrawingBoard src={fileUrl(q.imageUrl)} color={q.config.color} width={q.config.width} value={value} readOnly />;
     case 'MCQ': return <>{value.map((v) => optText(q, 'options', v)).join(', ')}</>;
     case 'TRUE_FALSE': return <>{value ? 'Cert' : 'Fals'}</>;
     case 'MATCHING': return <ul>{Object.entries(value).map(([l, r]) => <li key={l}>{optText(q, 'left', l)} → {optText(q, 'right', r)}</li>)}</ul>;
@@ -60,7 +62,7 @@ export default function AttemptReview() {
   const { data, isLoading } = useQuery({ queryKey: ['attempt-review', id], queryFn: () => api(`/api/teacher/attempts/${id}`) });
   if (isLoading) return <p>Carregant…</p>;
   const answers = [...data.answers].sort((a, b) => a.question.order - b.question.order);
-  const manual = (a) => ['SHORT_TEXT', 'LONG_TEXT', 'IMAGE_UPLOAD'].includes(a.question.type);
+  const manual = (a) => ['SHORT_TEXT', 'LONG_TEXT', 'IMAGE_UPLOAD', 'DRAWING'].includes(a.question.type);
   const pendingCount = answers.filter((a) => manual(a) && a.needsReview).length;
   const status = { NEEDS_REVIEW: 'Pendent de correcció', GRADED: 'Corregit', SUBMITTED: 'Enviat' }[data.status] || data.status;
   const refresh = () => qc.invalidateQueries({ queryKey: ['attempt-review', id] });

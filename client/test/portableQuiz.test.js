@@ -47,3 +47,19 @@ test('rejects unsupported versions and malformed question fields', () => {
   assert.throws(() => parsePortableQuiz({ format: 'palamForm.quiz', version: 1, title: 'Prova', questions: [{ type: 'SHORT_TEXT', text: 'Breu', regex: 'x'.repeat(201) }] }), /fins a 200/);
   assert.throws(() => parsePortableQuiz({ format: 'palamForm.quiz', version: 1, title: 'Prova', questions: [{ type: 'ORDERING', text: 'Ordena', items: ['Un'] }] }), /entre 2 i 30/);
 });
+
+test('imports calculated variables generated from a list', () => {
+  const parsed = parsePortableQuiz({
+    format: 'palamForm.quiz',
+    version: 1,
+    title: 'Llista',
+    questions: [{
+      type: 'CALCULATED',
+      text: 'Valor {x}',
+      variables: [{ name: 'x', mode: 'list', values: [1.25, 2, 4.5] }],
+      formula: '{x}',
+    }],
+  });
+  assert.equal(parsed.drafts[0].vars[0].mode, 'list');
+  assert.equal(parsed.drafts[0].vars[0].values, '1.25\n2\n4.5');
+});
