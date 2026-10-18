@@ -5,6 +5,7 @@ import { api, fileUrl } from '../api';
 import { ImageWithPoints } from '../components/QuestionInput.jsx';
 import DrawingBoard from '../components/DrawingBoard.jsx';
 import { formatGrade } from '../formatGrade.js';
+import { QuestionFlow } from '../components/QuestionBlocks.jsx';
 
 const optText = (q, list, id) => q.config[list].find((x) => x.id === id)?.text ?? id;
 
@@ -86,8 +87,8 @@ export default function AttemptReview() {
         <div><span className="eyebrow">RESPOSTES</span><h2>Revisió de l'intent</h2></div>
         <span className="panel-index">{answers.length} PREGUNTES</span>
       </div>
-      {answers.map((a, index) => (
-        <article className={`card review-question${a.needsReview ? ' is-pending' : ''}`} key={a.id}>
+      <QuestionFlow items={answers} groups={data.quiz.groups} get={(a) => a.question} render={(a, index, inGroup) => (
+        <article className={`${inGroup ? 'group-question' : 'card'} review-question${a.needsReview ? ' is-pending' : ''}`} key={a.id}>
           <div className="review-question-heading">
             <div className="review-question-title"><span className="review-question-number">{String(index + 1).padStart(2, '0')}</span><h3>{a.question.text}</h3></div>
             <span className={`review-score${a.needsReview ? ' is-pending' : a.score != null && a.score <= 0 ? ' is-negative' : ''}`}>{a.score == null ? 'Pendent' : formatGrade(a.score)} <i>/ {formatGrade(a.question.points)}</i></span>
@@ -101,7 +102,7 @@ export default function AttemptReview() {
             </div>
           )}
         </article>
-      ))}
+      )} />
     </div>
   );
 }

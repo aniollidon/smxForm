@@ -179,7 +179,7 @@ router.post('/quizzes', wrap(async (req, res) => {
 router.get('/quizzes/by-slug/:slug', wrap(async (req, res) => {
   const quiz = await prisma.quiz.findFirst({
     where: { publicSlug: req.params.slug, teacherId: req.user.id },
-    include: { questions: { orderBy: { order: 'asc' } } },
+    include: { questions: { orderBy: { order: 'asc' } }, groups: true },
   });
   if (!quiz) throw fail(404, 'Quiz no trobat');
   res.json({ ...quiz, questions: quiz.questions.map((q) => presentPreview(q, req)) });
@@ -188,6 +188,7 @@ router.get('/quizzes/by-slug/:slug', wrap(async (req, res) => {
 router.get('/quizzes/:id', wrap(async (req, res) => {
   const quiz = await ownQuiz(req, {
     classrooms: true,
+    groups: true,
     questions: { orderBy: { order: 'asc' } },
     attempts: {
       where: { status: { not: 'IN_PROGRESS' } },
@@ -220,18 +221,25 @@ router.delete('/quizzes/:id', wrap(async (req, res) => {
 }));
 
 router.post('/quizzes/:id/duplicate', wrap(async (req, res) => {
-  const src = await ownQuiz(req, { questions: true });
-  const { id: _i, createdAt, questions, publicSlug, ...rest } = src;
-  const copy = await prisma.quiz.create({
-    data: {
-      ...rest,
-      title: `${src.title} (còpia)`,
-      published: false,
-      publicSlug: crypto.randomBytes(8).toString('hex'),
-      questions: {
-        create: questions.map(({ id: _q, quizId, ...q }) => q),
+  const src = await ownQuiz(req, { questions: true, groups: true });
+  const { id: _i, createdAt, questions, groups, publicSlug, ...rest } = src;
+  const copy = await prisma.$transaction(async (tx) => {
+    const created = await tx.quiz.create({
+      data: {
+        ...rest,
+        title: `${src.title} (còpia)`,
+        published: false,
+        publicSlug: crypto.randomBytes(8).toString('hex'),
       },
-    },
+    });
+    const groupIds = new Map();
+    for (const group of groups) {
+      groupIds.set(group.id, (await tx.questionGroup.create({ data: { quizId: created.id, text: group.text } })).id);
+    }
+    for (const { id: _q, quizId, groupId, ...q } of questions) {
+      await tx.question.create({ data: { ...q, quizId: created.id, groupId: groupId ? groupIds.get(groupId) : null } });
+    }
+    return created;
   });
   res.status(201).json(copy);
 }));
@@ -239,12 +247,71 @@ router.post('/quizzes/:id/duplicate', wrap(async (req, res) => {
 router.post('/quizzes/:id/questions', wrap(async (req, res) => {
   const quiz = await ownQuiz(req);
   const data = parseQuestion(req.body);
-  const last = await prisma.question.aggregate({ where: { quizId: quiz.id }, _max: { order: true } });
+  const groupId = z.object({ groupId: z.number().int().nullable().optional() }).parse(req.body).groupId ?? null;
+  const existing = await prisma.question.findMany({ where: { quizId: quiz.id }, orderBy: { order: 'asc' }, select: { id: true, groupId: true } });
+  if (groupId !== null && !(await prisma.questionGroup.findFirst({ where: { id: groupId, quizId: quiz.id } }))) throw fail(400, 'Grup invàlid');
   const [q] = await prisma.$transaction([
-    prisma.question.create({ data: { ...data, quizId: quiz.id, order: (last._max.order ?? -1) + 1 } }),
+    prisma.question.create({ data: { ...data, quizId: quiz.id, groupId, order: existing.length } }),
     prisma.quiz.update({ where: { id: quiz.id }, data: { gradingVersion: { increment: 1 } } }),
   ]);
+  if (groupId !== null) {
+    // La pregunta nova va just després de l'última del grup.
+    const ids = existing.map((x) => x.id);
+    const lastMember = existing.reduce((last, x, i) => (x.groupId === groupId ? i : last), ids.length - 1);
+    ids.splice(lastMember + 1, 0, q.id);
+    await prisma.$transaction(ids.map((qid, order) => prisma.question.update({ where: { id: qid }, data: { order } })));
+  }
   res.status(201).json(present(q));
+}));
+
+async function dropEmptyGroups(quizId) {
+  await prisma.questionGroup.deleteMany({ where: { quizId, questions: { none: {} } } });
+}
+
+router.post('/quizzes/:id/groups', wrap(async (req, res) => {
+  const quiz = await ownQuiz(req);
+  const { text } = z.object({ text: z.string().max(5000).default('') }).parse(req.body);
+  res.status(201).json(await prisma.questionGroup.create({ data: { quizId: quiz.id, text } }));
+}));
+
+router.put('/groups/:gid', wrap(async (req, res) => {
+  const group = await prisma.questionGroup.findUnique({ where: { id: Number(req.params.gid) }, include: { quiz: true } });
+  if (!group || group.quiz.teacherId !== req.user.id) throw fail(404, 'Grup no trobat');
+  const { text } = z.object({ text: z.string().max(5000) }).parse(req.body);
+  res.json(await prisma.questionGroup.update({ where: { id: group.id }, data: { text } }));
+}));
+
+// Defineix d'una vegada l'ordre, les seccions i els grups de totes les preguntes.
+router.put('/quizzes/:id/layout', wrap(async (req, res) => {
+  const quiz = await ownQuiz(req, { questions: true, groups: true });
+  const { items } = z.object({
+    items: z.array(z.object({
+      id: z.number().int(),
+      sectionTitle: z.string().trim().max(200).nullable(),
+      groupId: z.number().int().nullable(),
+    })),
+  }).parse(req.body);
+  const valid = new Set(quiz.questions.map((q) => q.id));
+  if (items.length !== valid.size || !items.every((x) => valid.has(x.id)) || new Set(items.map((x) => x.id)).size !== valid.size) throw fail(400, 'Llista invàlida');
+  const groups = new Set(quiz.groups.map((g) => g.id));
+  const closed = new Set();
+  let previous = null;
+  for (const x of items) {
+    if (x.groupId !== null && !groups.has(x.groupId)) throw fail(400, 'Grup invàlid');
+    if (x.groupId !== previous) {
+      if (x.groupId !== null && closed.has(x.groupId)) throw fail(400, 'Les preguntes d’un grup han d’anar juntes');
+      if (previous !== null) closed.add(previous);
+    }
+    // Una secció no pot començar enmig d'un grup.
+    if (x.sectionTitle && x.groupId !== null && x.groupId === previous) throw fail(400, 'Una secció no pot començar enmig d’un grup');
+    previous = x.groupId;
+  }
+  await prisma.$transaction(items.map((x, order) => prisma.question.update({
+    where: { id: x.id },
+    data: { order, groupId: x.groupId, sectionTitle: x.sectionTitle || null },
+  })));
+  await dropEmptyGroups(quiz.id);
+  res.json({ ok: true });
 }));
 
 async function ownQuestion(req) {
@@ -268,6 +335,7 @@ router.delete('/questions/:qid', wrap(async (req, res) => {
     prisma.question.delete({ where: { id: Number(req.params.qid) } }),
     prisma.quiz.update({ where: { id: question.quizId }, data: { gradingVersion: { increment: 1 } } }),
   ]);
+  await dropEmptyGroups(question.quizId);
   res.json({ ok: true });
 }));
 
@@ -317,7 +385,7 @@ router.post('/quizzes/:id/regrade', wrap(async (req, res) => {
 router.get('/attempts/:aid', wrap(async (req, res) => {
   const a = await prisma.attempt.findUnique({
     where: { id: Number(req.params.aid) },
-    include: { quiz: true, user: { select: { email: true, name: true } }, answers: { include: { question: true } } },
+    include: { quiz: { include: { groups: true } }, user: { select: { email: true, name: true } }, answers: { include: { question: true } } },
   });
   if (!a || a.quiz.teacherId !== req.user.id) throw fail(404, 'Intent no trobat');
   res.json({

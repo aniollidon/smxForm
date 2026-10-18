@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import { upload } from '../api';
-import { dataUriToFile, parsePortableQuiz } from '../portableQuiz.js';
+import { applyImportedLayout, dataUriToFile, parsePortableQuiz } from '../portableQuiz.js';
 import { toPayload } from '../questionModel.js';
 import WorkspaceHero from '../components/WorkspaceHero.jsx';
 import FormatMenu from '../components/FormatMenu.jsx';
@@ -81,13 +81,15 @@ export default function TeacherHome() {
           published: false,
         },
       });
+      const createdQuestions = [];
       for (const draft of portable.drafts) {
         const imageUrl = draft.image ? (await upload('/api/files/question-image', dataUriToFile(draft.image))).imageUrl : null;
-        await api(`/api/teacher/quizzes/${created.id}/questions`, {
+        createdQuestions.push(await api(`/api/teacher/quizzes/${created.id}/questions`, {
           method: 'POST',
           body: toPayload({ ...draft, imageUrl }),
-        });
+        }));
       }
+      await applyImportedLayout(api, created.id, portable.drafts, createdQuestions);
       nav(`/t/quiz/${created.id}`);
     } catch (error) {
       if (created) {

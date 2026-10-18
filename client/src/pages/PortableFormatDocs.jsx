@@ -16,9 +16,11 @@ const example = `{
     "showResults": "SCORE",
     "showResultsFrom": null
   },
+  "groups": { "g1": "Llegeix el text sobre la fotosíntesi i respon:" },
   "questions": [
     {
       "type": "MCQ",
+      "section": "Orgànuls",
       "text": "Quin orgànul produeix energia?",
       "points": 1,
       "required": true,
@@ -32,6 +34,8 @@ const example = `{
     },
     {
       "type": "SHORT_TEXT",
+      "group": "g1",
+      "section": "Plantes",
       "text": "Quin gas absorbeix la planta?",
       "points": 1,
       "required": true,
@@ -66,13 +70,14 @@ export default function PortableFormatDocs() {
           <Field name="description">Opcional. Cadena de fins a 5000 caràcters; per defecte, cadena buida.</Field>
           <Field name="settings">Opcional. Objecte de configuració global descrit a continuació.</Field>
           <Field name="questions">Obligatori. Llista d’1 a 200 preguntes, en l’ordre de presentació.</Field>
+          <Field name="groups">Opcional. Objecte que associa una clau de grup amb el seu enunciat comú (fins a 5000 caràcters); les preguntes l’usen amb el camp <code>group</code>.</Field>
         </tbody></table></div>
 
         <h2>Configuració de l’entrega</h2>
         <p>Tots els camps de <code>settings</code> són opcionals; si s’ometen, s’aplica el valor indicat. Les notes sempre es calculen sobre la suma dels punts de les preguntes i després s’escaleen a <code>maxScore</code>.</p>
         <div className="format-table-wrap"><table><tbody>
           <Field name="maxScore">Nombre superior a 0 i fins a 1000. Nota màxima mostrada, per defecte <code>10</code>.</Field>
-          <Field name="shuffleQuestions">Booleà. Barreja les preguntes per alumne; per defecte <code>false</code>.</Field>
+          <Field name="shuffleQuestions">Booleà. Barreja les preguntes per alumne dins de cada secció (un grup es mou sencer); per defecte <code>false</code>.</Field>
           <Field name="allowRetry">Booleà. Permet més d’un intent; per defecte <code>false</code>.</Field>
           <Field name="maxAttempts">Enter d’1 a 100; per defecte <code>1</code>. Només s’aplica quan <code>allowRetry</code> és true.</Field>
           <Field name="negativePenalty">Nombre entre 0 i 1: fracció dels punts de la pregunta que es resten per una resposta incorrecta. <code>0</code> no resta; per defecte <code>0</code>.</Field>
@@ -90,6 +95,8 @@ export default function PortableFormatDocs() {
           <Field name="required">Booleà. Si és true, l’alumne l’ha de respondre per enviar; per defecte <code>true</code>.</Field>
           <Field name="shuffleOptions">Booleà. Barreja les opcions que admeten ordre aleatori; per defecte <code>true</code> als tipus compatibles, <code>false</code> a la resta.</Field>
           <Field name="allowClipboard">Booleà. Permet copiar i enganxar en aquesta pregunta; per defecte <code>false</code>.</Field>
+          <Field name="section">Opcional. Títol (fins a 200 caràcters) d’una secció nova que comença en aquesta pregunta; l’alumne la veu com una pàgina.</Field>
+          <Field name="group">Opcional. Clau d’un grup definit a l’objecte <code>groups</code> de l’arrel (<code>{'{"g1": "Enunciat comú"}'}</code>). Les preguntes d’un mateix grup han d’anar seguides i comparteixen l’enunciat.</Field>
           <Field name="image">Opcional per als tipus excepte <code>IMAGE_LABEL</code>, on és obligatori. Data URI base64 d’una imatge PNG, JPEG, WebP o GIF: <code>data:image/png;base64,...</code>. Màxim 5 MiB descodificats. L’importador comprova el tipus real del fitxer. Per a preguntes amb imatge d’etiquetatge, els punts són coordenades percentuals respecte a la imatge.</Field>
         </tbody></table></div>
 

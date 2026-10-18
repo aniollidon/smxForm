@@ -45,7 +45,17 @@ function studentQuestion(q, seed) {
 
 function orderedQuestions(quiz, questions, seed) {
   const sorted = [...questions].sort((a, b) => a.order - b.order);
-  return quiz.shuffleQuestions ? shuffle(sorted, seed) : sorted;
+  if (!quiz.shuffleQuestions) return sorted;
+  // Es barregen les preguntes dins de cada secció; un grup es mou com un sol bloc.
+  const sections = [];
+  for (const q of sorted) {
+    if (!sections.length || q.sectionTitle) sections.push({ title: q.sectionTitle ?? null, units: [] });
+    const units = sections[sections.length - 1].units;
+    const last = units[units.length - 1];
+    if (q.groupId != null && last && last[0].groupId === q.groupId) last.push(q);
+    else units.push([q]);
+  }
+  return sections.flatMap((section, i) => shuffle(section.units, seed + i).flat().map((q, j) => ({ ...q, sectionTitle: j === 0 ? section.title : null })));
 }
 
 const resultsVisible = (quiz) => quiz.showResults !== 'NONE' && (!quiz.showResultsFrom || new Date() >= quiz.showResultsFrom);
@@ -56,6 +66,7 @@ function attemptResult(attempt, quiz, questions, answers) {
   if (!base.visible) return base;
   base.score = attempt.score;
   base.maxScore = quiz.maxScore;
+  base.groups = quiz.groups || [];
   if (quiz.showResults === 'FULL' || quiz.showResults === 'ANSWERS') {
     const corrected = quiz.showResults === 'FULL';
     base.corrected = corrected;
@@ -65,6 +76,8 @@ function attemptResult(attempt, quiz, questions, answers) {
       const pq = personalize({ ...q, config: JSON.parse(q.config), answerKey: JSON.parse(q.answerKey) }, attempt.seed);
       return {
         id: q.id,
+        sectionTitle: q.sectionTitle,
+        groupId: q.groupId,
         text: pq.text,
         type: q.type,
         points: q.points,
@@ -140,7 +153,7 @@ router.post('/quizzes/:slug/start', wrap(async (req, res) => {
 async function ownAttempt(req) {
   const a = await prisma.attempt.findUnique({
     where: { id: Number(req.params.aid) },
-    include: { quiz: { include: { questions: true } }, answers: true },
+    include: { quiz: { include: { questions: true, groups: true } }, answers: true },
   });
   if (!a || a.userId !== req.user.id) throw fail(404, 'Intent no trobat');
   return a;
@@ -153,6 +166,7 @@ router.get('/attempts/:aid', wrap(async (req, res) => {
   const out = { id: a.id, status: a.status, title: a.quiz.title, result };
   if (a.status === 'IN_PROGRESS') {
     out.questions = questions.map((q) => studentQuestion(q, a.seed));
+    out.groups = a.quiz.groups;
     out.answers = Object.fromEntries(a.answers.map((x) => [x.questionId, { value: JSON.parse(x.value), fileUrl: x.fileUrl }]));
   }
   res.json(out);

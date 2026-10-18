@@ -4,6 +4,8 @@ import { useQuery } from '@tanstack/react-query';
 import { api, fileUrl } from '../api';
 import QuestionInput from '../components/QuestionInput.jsx';
 import { formatGrade } from '../formatGrade.js';
+import PagedQuestions from '../components/QuestionBlocks.jsx';
+import { buildPages } from '../layout.js';
 
 const randomSeed = () => Math.floor(Math.random() * 2 ** 30);
 
@@ -11,6 +13,7 @@ export default function QuizPreview() {
   const { id, slug } = useParams();
   const key = id || slug;
   const [seed, setSeed] = useState(randomSeed);
+  const [page, setPage] = useState(0);
   const endpoint = `${id ? `/api/teacher/quizzes/${id}` : `/api/teacher/quizzes/by-slug/${slug}`}?seed=${seed}`;
   const { data: quiz, isLoading, error } = useQuery({ queryKey: ['quiz-preview', key, seed], queryFn: () => api(endpoint) });
 
@@ -28,23 +31,29 @@ export default function QuizPreview() {
       </div>
       <h2>{quiz.title}</h2>
       {quiz.description && <p className="preview-description">{quiz.description}</p>}
-      {quiz.questions.map((question, index) => (
-        <div className="card stack" key={question.id}>
-          <div className="review-question-title">
-            <span className="review-question-number">{String(index + 1).padStart(2, '0')}</span>
-            <div className="review-question-text">
-              <b>{question.text}</b>{' '}
-              {question.required && <span className="error">*</span>}{' '}
-              <span className="muted">({formatGrade(question.points)} pt)</span>
+      <PagedQuestions
+        pages={buildPages(quiz.questions, quiz.groups)}
+        page={page}
+        onPage={setPage}
+        isIncomplete={() => false}
+        render={(question, index, inGroup) => (
+          <div className={`${inGroup ? 'group-question' : 'card'} stack`} key={question.id}>
+            <div className="review-question-title">
+              <span className="review-question-number">{String(index + 1).padStart(2, '0')}</span>
+              <div className="review-question-text">
+                <b>{question.text}</b>{' '}
+                {question.required && <span className="error">*</span>}{' '}
+                <span className="muted">({formatGrade(question.points)} pt)</span>
+              </div>
+            </div>
+            {question.type !== 'IMAGE_LABEL' && question.imageUrl && <img className="preview-question-image" src={fileUrl(question.imageUrl)} alt="" />}
+            <div className="question-response">
+              <QuestionInput q={question} value={question.type === 'MCQ' ? [] : undefined} disabled />
             </div>
           </div>
-          {question.type !== 'IMAGE_LABEL' && question.imageUrl && <img className="preview-question-image" src={fileUrl(question.imageUrl)} alt="" />}
-          <div className="question-response">
-            <QuestionInput q={question} value={question.type === 'MCQ' ? [] : undefined} disabled />
-          </div>
-        </div>
-      ))}
-      <div className="row preview-submit"><button disabled>Envia l’entrega</button></div>
+        )}
+        footer={<div className="row preview-submit"><button disabled>Envia l’entrega</button></div>}
+      />
     </div>
   );
 }

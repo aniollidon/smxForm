@@ -91,18 +91,68 @@ export function exportQuiz(quiz, imageByName = {}) {
     showResults: quiz.showResults,
     showResultsFrom: quiz.showResultsFrom,
   };
+  const groupKeys = new Map();
+  const groups = {};
+  const questions = quiz.questions.map((question) => {
+    const exported = exportQuestion(question, imageByName[question.imageUrl] || null);
+    if (question.sectionTitle) exported.section = question.sectionTitle;
+    if (question.groupId != null) {
+      if (!groupKeys.has(question.groupId)) {
+        const key = `g${groupKeys.size + 1}`;
+        groupKeys.set(question.groupId, key);
+        groups[key] = quiz.groups?.find((group) => group.id === question.groupId)?.text || '';
+      }
+      exported.group = groupKeys.get(question.groupId);
+    }
+    return exported;
+  });
   return {
     format: PORTABLE_FORMAT,
     version: PORTABLE_VERSION,
     title: quiz.title,
     description: quiz.description || '',
     settings,
-    questions: quiz.questions.map((question) => exportQuestion(question, imageByName[question.imageUrl] || null)),
+    ...(groupKeys.size ? { groups } : {}),
+    questions,
   };
 }
 
 function requireValue(condition, message) {
   if (!condition) throw new Error(message);
+}
+
+// Resol els textos dels grups i comprova que les preguntes de cada grup van seguides.
+function attachGroups(drafts, groups) {
+  requireValue(groups == null || (typeof groups === 'object' && !Array.isArray(groups) && Object.values(groups).every((text) => typeof text === 'string' && text.length <= 5000)), '«groups» ha de ser un objecte amb textos de fins a 5000 caràcters.');
+  const closed = new Set();
+  let previous = null;
+  for (const draft of drafts) {
+    if (draft.groupKey) {
+      requireValue(groups && draft.groupKey in groups, `El grup «${draft.groupKey}» no està definit a «groups».`);
+      requireValue(draft.groupKey === previous || !closed.has(draft.groupKey), 'Les preguntes d’un grup han d’anar seguides.');
+      requireValue(draft.groupKey !== previous || !draft.sectionTitle, 'Una secció no pot començar enmig d’un grup.');
+      draft.groupText = groups[draft.groupKey];
+    }
+    if (previous && previous !== draft.groupKey) closed.add(previous);
+    previous = draft.groupKey || null;
+  }
+  return drafts;
+}
+
+// Crea els grups i fixa seccions i grups de les preguntes acabades d'importar (al final de la llista).
+export async function applyImportedLayout(api, quizId, drafts, created, existing = []) {
+  if (!drafts.some((draft) => draft.sectionTitle || draft.groupKey)) return;
+  const groupIds = new Map();
+  for (const draft of drafts) {
+    if (draft.groupKey && !groupIds.has(draft.groupKey)) {
+      groupIds.set(draft.groupKey, (await api(`/api/teacher/quizzes/${quizId}/groups`, { method: 'POST', body: { text: draft.groupText || '' } })).id);
+    }
+  }
+  const items = [
+    ...existing.map((q) => ({ id: q.id, sectionTitle: q.sectionTitle ?? null, groupId: q.groupId ?? null })),
+    ...created.map((q, i) => ({ id: q.id, sectionTitle: drafts[i].sectionTitle || null, groupId: groupIds.get(drafts[i].groupKey) ?? null })),
+  ];
+  await api(`/api/teacher/quizzes/${quizId}/layout`, { method: 'PUT', body: { items } });
 }
 
 export function importQuestionToDraft(question) {
@@ -120,6 +170,10 @@ export function importQuestionToDraft(question) {
     allowClipboard: question.allowClipboard ?? false,
   };
   requireValue(typeof base.allowClipboard === 'boolean', '«allowClipboard» ha de ser boolean.');
+  requireValue(question.section == null || (typeof question.section === 'string' && question.section.trim() && question.section.length <= 200), '«section» ha de ser un text de fins a 200 caràcters.');
+  requireValue(question.group == null || (typeof question.group === 'string' && question.group), '«group» ha de ser una clau de text.');
+  base.sectionTitle = question.section?.trim() || null;
+  base.groupKey = question.group || null;
   let draft;
   switch (question.type) {
     case 'MCQ':
@@ -218,7 +272,7 @@ export function parsePortableQuestions(data) {
   else throw new Error('El fitxer ha de contenir una entrega, una llista de preguntes o una pregunta.');
   requireValue(Array.isArray(questions) && questions.length > 0, 'El fitxer ha de contenir almenys una pregunta.');
   requireValue(questions.length <= 200, 'No es poden importar més de 200 preguntes alhora.');
-  return questions.map(importQuestionToDraft);
+  return attachGroups(questions.map(importQuestionToDraft), data?.groups);
 }
 
 export function parsePortableQuiz(data) {
@@ -254,6 +308,6 @@ export function parsePortableQuiz(data) {
     requireValue(typeof quiz.showResultsFrom === 'string' && /T.*(?:Z|[+-]\d\d:\d\d)$/.test(quiz.showResultsFrom) && !Number.isNaN(Date.parse(quiz.showResultsFrom)), '«settings.showResultsFrom» ha de ser una data ISO 8601 amb zona horària o null.');
     quiz.showResultsFrom = new Date(quiz.showResultsFrom).toISOString();
   }
-  const drafts = data.questions.map(importQuestionToDraft);
+  const drafts = attachGroups(data.questions.map(importQuestionToDraft), data.groups);
   return { ...quiz, drafts };
 }

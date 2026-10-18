@@ -36,6 +36,7 @@ model Quiz {
   publicSlug            String     @unique
   gradingVersion        Int        @default(0)
   questions             Question[]
+  groups                QuestionGroup[]
   attempts              Attempt[]
   classrooms            QuizClassroom[]
   createdAt             DateTime   @default(now())
@@ -52,10 +53,21 @@ model QuizClassroom {
   @@unique([quizId, courseId])
 }
 
+model QuestionGroup {
+  id        Int        @id @default(autoincrement())
+  quizId    Int
+  quiz      Quiz       @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  text      String     @default("")
+  questions Question[]
+}
+
 model Question {
   id             Int      @id @default(autoincrement())
   quizId         Int
   quiz           Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  sectionTitle   String? // si està definit, aquí comença una secció nova
+  groupId        Int?
+  group          QuestionGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
   type           String // MCQ | TRUE_FALSE | MATCHING | IMAGE_LABEL | SHORT_TEXT | LONG_TEXT | IMAGE_UPLOAD
   text           String
   imageUrl       String?

@@ -4,8 +4,10 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, fileUrl, upload } from '../api';
 import QuestionEditor from '../components/QuestionEditor.jsx';
 import FormatMenu from '../components/FormatMenu.jsx';
+import ActionMenu from '../components/ActionMenu.jsx';
 import { TYPE_LABELS, emptyDraft, fromQuestion } from '../questionModel';
-import { blobToDataUri, dataUriToFile, exportQuiz, parsePortableQuestions } from '../portableQuiz.js';
+import { applyImportedLayout, blobToDataUri, dataUriToFile, exportQuiz, parsePortableQuestions } from '../portableQuiz.js';
+import { toEditorEntries, toLayoutItems } from '../layout.js';
 import { toPayload } from '../questionModel.js';
 import { formatGrade } from '../formatGrade.js';
 import { usePrompt } from '../components/PromptProvider.jsx';
@@ -157,6 +159,7 @@ export default function QuizEditor() {
   const qc = useQueryClient();
   const { data: quiz, isLoading, error } = useQuery({ queryKey: ['quiz-edit', id], queryFn: () => api(`/api/teacher/quizzes/${id}`) });
   const [editing, setEditing] = useState(null); // draft o null
+  const [editingGroup, setEditingGroup] = useState(null); // grup on s'afegeix la pregunta nova
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState('');
   const [importBusy, setImportBusy] = useState(false);
@@ -168,22 +171,66 @@ export default function QuizEditor() {
   if (isLoading) return <p>Carregant…</p>;
   if (error) return <p className="error">{error.message}</p>;
 
+  const closeEditor = () => { setEditing(null); setEditingGroup(null); };
   const save = async (payload, qid) => {
-    await api(qid ? `/api/teacher/questions/${qid}` : `/api/teacher/quizzes/${id}/questions`, { method: qid ? 'PUT' : 'POST', body: payload });
-    setEditing(null);
+    await api(qid ? `/api/teacher/questions/${qid}` : `/api/teacher/quizzes/${id}/questions`, { method: qid ? 'PUT' : 'POST', body: qid || editingGroup === null ? payload : { ...payload, groupId: editingGroup } });
+    closeEditor();
     refresh();
   };
-  const move = async (i, d) => {
-    const ids = quiz.questions.map((q) => q.id);
-    [ids[i], ids[i + d]] = [ids[i + d], ids[i]];
-    await api(`/api/teacher/quizzes/${id}/reorder`, { method: 'PUT', body: { ids } });
+
+  const entries = toEditorEntries(quiz.questions, quiz.groups || []);
+  const numberOf = new Map(quiz.questions.map((q, k) => [q.id, k + 1]));
+  const swap = (list, i, d) => { const next = [...list]; [next[i], next[i + d]] = [next[i + d], next[i]]; return next; };
+  const addSection = (list, i) => [...list.slice(0, i), { kind: 'section', title: 'Secció nova' }, ...list.slice(i)];
+  // Dues seccions seguides o una secció final no tenen cap pregunta on guardar-se.
+  const validEntries = (list) => list.every((e, k) => e.kind !== 'section' || (k < list.length - 1 && list[k + 1].kind !== 'section'));
+  const canMoveEntry = (i, d) => i + d >= 0 && i + d < entries.length && validEntries(swap(entries, i, d));
+  const commit = async (next) => {
+    await api(`/api/teacher/quizzes/${id}/layout`, { method: 'PUT', body: { items: toLayoutItems(next) } });
     refresh();
+  };
+  const renameSection = (i, title) => {
+    const clean = title.trim() || 'Secció';
+    if (clean !== entries[i].title) commit(entries.map((e, k) => (k === i ? { ...e, title: clean } : e)));
+  };
+  const saveGroupText = async (gid, text) => {
+    await api(`/api/teacher/groups/${gid}`, { method: 'PUT', body: { text } });
+    refresh();
+  };
+  const newGroup = async () => {
+    await api(`/api/teacher/quizzes/${id}/groups`, { method: 'POST', body: { text: '' } });
+    refresh();
+  };
+  const groupQuestion = async (i) => {
+    const group = await api(`/api/teacher/quizzes/${id}/groups`, { method: 'POST', body: { text: '' } });
+    commit(entries.map((e, k) => (k === i ? { kind: 'group', group, questions: [e.q] } : e)));
   };
   const del = async (qid) => {
     if (!await confirm('Aquesta pregunta i les respostes associades s’esborraran.', { title: 'Esborrar la pregunta?', confirmLabel: 'Esborra', danger: true })) return;
     await api(`/api/teacher/questions/${qid}`, { method: 'DELETE' });
-    refresh();
+    // Reassigna el títol de secció si la pregunta esborrada n'era la primera.
+    const next = entries.map((e) => (e.kind === 'question' ? e : e.kind === 'group' ? { ...e, questions: e.questions.filter((q) => q.id !== qid) } : e)).filter((e) => !(e.kind === 'question' && e.q.id === qid));
+    await commit(next);
   };
+  const questionRow = (q, inGroup, controls, menu = []) => (editing?.id === q.id ? (
+    <QuestionEditor key={q.id} initial={editing} onSave={save} onCancel={closeEditor} />
+  ) : (
+    <div className={`${inGroup ? 'group-member' : 'card'} row between quiz-question-row`}>
+      <div className="quiz-question-summary">
+        <span className="badge quiz-question-type">{TYPE_LABELS[q.type]}</span>
+        <div className="review-question-title"><span className="review-question-number">{String(numberOf.get(q.id)).padStart(2, '0')}</span><span className="quiz-question-prompt">{q.text.slice(0, 100)} <span className="muted">({formatGrade(q.points)} pt{q.required ? ', obligatòria' : ''})</span></span></div>
+      </div>
+      <div className="row quiz-question-actions">
+        {React.Children.toArray(controls)}
+        <button className="secondary" onClick={() => setEditing(fromQuestion(q))}>Edita</button>
+        <ActionMenu items={[
+          ['SHORT_TEXT', 'LONG_TEXT', 'IMAGE_UPLOAD', 'DRAWING'].includes(q.type) && { label: 'Veure respostes ↗', to: `/t/quiz/${id}/question/${q.id}/answers` },
+          ...menu,
+          { label: 'Esborra la pregunta', danger: true, onClick: () => del(q.id) },
+        ]} />
+      </div>
+    </div>
+  ));
 
   const downloadExport = async () => {
     setExporting(true);
@@ -216,12 +263,14 @@ export default function QuizEditor() {
       if (file.size > 50 * 1024 * 1024) throw new Error('El fitxer no pot superar els 50 MiB.');
       const drafts = parsePortableQuestions(JSON.parse(await file.text()));
       let done = 0;
+      const createdQuestions = [];
       try {
         for (const draft of drafts) {
           const imageUrl = draft.image ? (await upload('/api/files/question-image', dataUriToFile(draft.image))).imageUrl : null;
-          await api(`/api/teacher/quizzes/${id}/questions`, { method: 'POST', body: toPayload({ ...draft, imageUrl }) });
+          createdQuestions.push(await api(`/api/teacher/quizzes/${id}/questions`, { method: 'POST', body: toPayload({ ...draft, imageUrl }) }));
           done += 1;
         }
+        await applyImportedLayout(api, id, drafts, createdQuestions, quiz.questions);
       } catch (error) {
         throw new Error(`${error.message} (s’han importat ${done} de ${drafts.length} preguntes).`);
       } finally {
@@ -310,26 +359,97 @@ export default function QuizEditor() {
           <div><span className="eyebrow">02 / CONTINGUT</span><h2>Preguntes</h2></div>
           <span className="panel-index">{quiz.questions.length} {quiz.questions.length === 1 ? 'PREGUNTA' : 'PREGUNTES'}</span>
         </div>
-      {quiz.questions.map((q, i) =>
-        editing?.id === q.id ? (
-          <QuestionEditor key={q.id} initial={editing} onSave={save} onCancel={() => setEditing(null)} />
-        ) : (
-          <div className="card row between quiz-question-row" key={q.id}>
-            <div className="quiz-question-summary">
-              <span className="badge quiz-question-type">{TYPE_LABELS[q.type]}</span>
-              <div className="review-question-title"><span className="review-question-number">{String(i + 1).padStart(2, '0')}</span><span className="quiz-question-prompt">{q.text.slice(0, 100)} <span className="muted">({formatGrade(q.points)} pt{q.required ? ', obligatòria' : ''})</span></span></div>
+      {entries.map((entry, i) => {
+        const rowControls = (up, down) => (
+          <>
+            <button className="secondary" disabled={!up} onClick={up} aria-label="Puja">↑</button>
+            <button className="secondary" disabled={!down} onClick={down} aria-label="Baixa">↓</button>
+          </>
+        );
+        const moveEntryProps = [canMoveEntry(i, -1) && (() => commit(swap(entries, i, -1))), canMoveEntry(i, 1) && (() => commit(swap(entries, i, 1)))];
+        const canAddSection = entries[i - 1]?.kind !== 'section' && validEntries(addSection(entries, i));
+
+        if (entry.kind === 'section') {
+          return (
+            <div className="section-divider" key={`s-${i}-${entry.title}`}>
+              <span className="eyebrow">SECCIÓ · NOVA PÀGINA</span>
+              <input type="text" defaultValue={entry.title} maxLength={200} aria-label="Títol de la secció" onBlur={(e) => renameSection(i, e.target.value)} />
+              <div className="row">
+                {rowControls(...moveEntryProps)}
+                <ActionMenu items={[{ label: 'Treu la secció (les preguntes es mantenen)', danger: true, onClick: () => commit(entries.filter((_, k) => k !== i)) }]} />
+              </div>
             </div>
-            <div className="row quiz-question-actions">
-              {['SHORT_TEXT', 'LONG_TEXT', 'IMAGE_UPLOAD', 'DRAWING'].includes(q.type) && <Link className="question-answer-shortcut" to={`/t/quiz/${id}/question/${q.id}/answers`}>Veure respostes ↗</Link>}
-              <button className="secondary" disabled={i === 0} onClick={() => move(i, -1)}>↑</button>
-              <button className="secondary" disabled={i === quiz.questions.length - 1} onClick={() => move(i, 1)}>↓</button>
-              <button className="secondary" onClick={() => setEditing(fromQuestion(q))}>Edita</button>
-              <button className="danger" onClick={() => del(q.id)}>✕</button>
+          );
+        }
+
+        const sectionItem = canAddSection && !editing && { label: '+ Secció abans', onClick: () => commit(addSection(entries, i)) };
+
+        if (entry.kind === 'group') {
+          const { group } = entry;
+          const members = entry.questions;
+          const swapInGroup = (j, d) => entries.map((e, k) => (k === i ? { ...e, questions: swap(members, j, d) } : e));
+          const leaveGroup = (j) => {
+            const rest = members.filter((_, k) => k !== j);
+            const next = [...entries];
+            const loose = { kind: 'question', q: members[j] };
+            if (j === 0) next.splice(i, rest.length ? 0 : 1, loose);
+            else next.splice(i + 1, 0, loose);
+            if (rest.length) next[next.indexOf(entry)] = { ...entry, questions: rest };
+            commit(next);
+          };
+          const dissolve = () => commit(entries.flatMap((e, k) => (k === i ? e.questions.map((q) => ({ kind: 'question', q })) : [e])));
+          return (
+            <div className="card group-editor stack" key={`g-${group.id}`}>
+              <div className="row between">
+                <span className="badge">GRUP DE PREGUNTES</span>
+                <div className="row">
+                  {rowControls(...moveEntryProps)}
+                  <ActionMenu items={[sectionItem, { label: 'Desagrupa les preguntes', onClick: dissolve }]} />
+                </div>
+              </div>
+              <label>Enunciat comú
+                <textarea defaultValue={group.text} placeholder="Text que es mostra únicament una vegada, abans de les preguntes del grup" key={`${group.id}-${group.text}`} onBlur={(e) => e.target.value !== group.text && saveGroupText(group.id, e.target.value)} />
+              </label>
+              <div className="group-members">
+                {members.map((q, j) => (
+                  <div key={q.id}>
+                    {questionRow(q, true,
+                      rowControls(j > 0 && (() => commit(swapInGroup(j, -1))), j < members.length - 1 && (() => commit(swapInGroup(j, 1)))),
+                      [(j === 0 || j === members.length - 1) && { label: 'Treu del grup', onClick: () => leaveGroup(j) }],
+                    )}
+                  </div>
+                ))}
+                {members.length === 0 && <p className="muted">Aquest grup encara no té preguntes.</p>}
+                {editing && !editing.id && editingGroup === group.id && <QuestionEditor initial={editing} onSave={save} onCancel={closeEditor} />}
+              </div>
+              {!editing && (
+                <div className="row">
+                  <strong>Afegeix al grup:</strong>
+                  {Object.entries(TYPE_LABELS).map(([t, l]) => <button key={t} className="secondary" onClick={() => { setEditingGroup(group.id); setEditing(emptyDraft(t)); }}>{l}</button>)}
+                </div>
+              )}
             </div>
+          );
+        }
+
+        const neighbour = (d) => entries[i + d]?.kind === 'group' ? entries[i + d] : null;
+        const joinGroup = (d) => {
+          const target = neighbour(d);
+          const merged = { ...target, questions: d < 0 ? [...target.questions, entry.q] : [entry.q, ...target.questions] };
+          commit(entries.flatMap((e, k) => (k === i ? [] : k === i + d ? [merged] : [e])));
+        };
+        return (
+          <div key={entry.q.id}>
+            {questionRow(entry.q, false, rowControls(...moveEntryProps), [
+              sectionItem,
+              neighbour(-1) && { label: '↑ Mou al grup anterior', onClick: () => joinGroup(-1) },
+              neighbour(1) && { label: '↓ Mou al grup següent', onClick: () => joinGroup(1) },
+              { label: 'Agrupa en un grup nou', onClick: () => groupQuestion(i) },
+            ])}
           </div>
-        )
-      )}
-      {editing && !editing.id && <QuestionEditor initial={editing} onSave={save} onCancel={() => setEditing(null)} />}
+        );
+      })}
+      {editing && !editing.id && editingGroup === null && <QuestionEditor initial={editing} onSave={save} onCancel={closeEditor} />}
       {!editing && (
         <div className="card quiz-add-question">
           <strong>Afegeix una pregunta</strong>
@@ -337,6 +457,8 @@ export default function QuizEditor() {
           {Object.entries(TYPE_LABELS).map(([t, l]) => <button key={t} className="secondary" onClick={() => setEditing(emptyDraft(t))}>{l}</button>)}
           </div>
           <div className="row">
+            <button className="secondary" onClick={newGroup}>+ Grup de preguntes</button>
+            <button className="secondary" disabled={entries.length === 0 || entries[entries.length - 1].kind === 'section'} onClick={() => commit([...entries, { kind: 'section', title: 'Secció nova' }])} title="Les següents preguntes aniran a una nova pàgina">+ Secció al final</button>
             <button className="secondary" disabled={importBusy} onClick={() => importInput.current?.click()}>{importBusy ? 'Important…' : 'Importa de JSON'}</button>
             <input ref={importInput} className="visually-hidden" type="file" accept=".json,application/json" tabIndex={-1} aria-label="Fitxer JSON de preguntes" onChange={(event) => event.target.files[0] && importQuestions(event.target.files[0])} />
             {importMessage && <span className="muted">{importMessage}</span>}

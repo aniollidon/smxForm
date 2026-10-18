@@ -6,6 +6,8 @@ import QuestionInput, { ImageWithPoints } from '../components/QuestionInput.jsx'
 import DrawingBoard from '../components/DrawingBoard.jsx';
 import { formatGrade } from '../formatGrade.js';
 import { usePrompt } from '../components/PromptProvider.jsx';
+import PagedQuestions, { QuestionFlow } from '../components/QuestionBlocks.jsx';
+import { buildPages, isAnswered } from '../layout.js';
 
 function AnswerBlock({ label, children, tone }) {
   return (
@@ -35,10 +37,11 @@ function PlainAnswer({ q, value }) {
   }
 }
 
-function QuestionResult({ q, index }) {
+function QuestionResult({ q, index, inGroup }) {
+  const cardClass = `${inGroup ? 'group-question' : 'card'} stack result-question`;
   if (!q.answerKey) {
     return (
-      <div className="card stack result-question">
+      <div className={cardClass} key={q.id}>
         <div className="review-question-title"><span className="review-question-number">{String(index + 1).padStart(2, '0')}</span><b>{q.text}</b></div>
         <AnswerBlock label="La teva resposta"><PlainAnswer q={q} value={q.value} /></AnswerBlock>
       </div>
@@ -175,7 +178,7 @@ function QuestionResult({ q, index }) {
   }
 
   return (
-    <div className="card stack result-question">
+    <div className={cardClass}>
       <div className="row between result-heading">
         <div className="review-question-title"><span className="review-question-number">{String(index + 1).padStart(2, '0')}</span><b>{q.text}</b></div>
         <span className={`result-score result-${scoreTone}`}>{formatGrade(q.score)} / {formatGrade(q.points)} · {status}</span>
@@ -213,7 +216,7 @@ function Result({ result, title }) {
         {result.status === 'NEEDS_REVIEW' && <p className="review-pending-note">Pendent de correcció manual per part del professor.</p>}
       </header>
       <div className="stack">
-        {result.questions?.map((q, index) => <QuestionResult q={q} index={index} key={q.id} />)}
+        {result.questions && <QuestionFlow items={result.questions} groups={result.groups} render={(q, index, inGroup) => <QuestionResult q={q} index={index} inGroup={inGroup} key={q.id} />} />}
       </div>
     </div>
   );
@@ -226,6 +229,7 @@ export default function TakeQuiz() {
   const { data, isLoading, error } = useQuery({ queryKey: ['attempt', id], queryFn: () => api(`/api/student/attempts/${id}`) });
   const [answers, setAnswers] = useState({});
   const [missing, setMissing] = useState([]);
+  const [page, setPage] = useState(0);
   const [msg, setMsg] = useState('');
   const [saveState, setSaveState] = useState('');
   const [pasteBlocked, setPasteBlocked] = useState(null);
@@ -268,7 +272,10 @@ export default function TakeQuiz() {
       await api(`/api/student/attempts/${id}/submit`, { method: 'POST' });
       await qc.invalidateQueries();
     } catch (e) {
-      setMissing(e.data?.missing || []);
+      const ids = e.data?.missing || [];
+      setMissing(ids);
+      const firstPage = buildPages(data.questions, data.groups).findIndex((p) => p.blocks.some((b) => (b.type === 'group' ? b.entries.map((x) => x.item) : [b.item]).some((q) => ids.includes(q.id))));
+      if (firstPage >= 0) setPage(firstPage);
       setMsg(e.message);
     }
   };
@@ -283,6 +290,38 @@ export default function TakeQuiz() {
       </div>
     );
   }
+  const renderQuestion = (q, i, inGroup) => (
+    <div
+      className={`${inGroup ? 'group-question' : 'card'} stack`}
+      key={q.id}
+      style={missing.includes(q.id) ? { outline: '2px solid #dc2626' } : undefined}
+      onCopy={q.config?.allowClipboard ? undefined : (event) => event.preventDefault()}
+      onCut={q.config?.allowClipboard ? undefined : (event) => event.preventDefault()}
+    >
+      <div
+        className={q.config?.allowClipboard ? undefined : 'take-quiz-question-prompt'}
+        onContextMenu={q.config?.allowClipboard ? undefined : (event) => event.preventDefault()}
+      >
+        <div className="review-question-title">
+          <span className="review-question-number">{String(i + 1).padStart(2, '0')}</span>
+          <div className="review-question-text"><b>{q.text}</b> {q.required && <span className="error">*</span>} <span className="muted">({formatGrade(q.points)} pt)</span></div>
+        </div>
+      </div>
+      {q.type !== 'IMAGE_LABEL' && q.type !== 'DRAWING' && q.imageUrl && <img src={`/api/files/${q.imageUrl}`} alt="" style={{ maxWidth: '100%' }} />}
+      <div className="question-response">
+        <QuestionInput
+          q={q}
+          attemptId={data.id}
+          value={answers[q.id]?.value}
+          fileName={answers[q.id]?.fileUrl}
+          pasteBlockedField={pasteBlocked?.questionId === q.id ? pasteBlocked.field : null}
+          onPasteBlocked={(field) => setPasteBlocked({ questionId: q.id, field })}
+          onChange={(v) => change(q.id, v)}
+          onFile={(f) => setAnswers((a) => ({ ...a, [q.id]: { value: 'file', fileUrl: f } }))}
+        />
+      </div>
+    </div>
+  );
   return (
     <div className="take-quiz">
       <header className="take-quiz-header">
@@ -291,48 +330,26 @@ export default function TakeQuiz() {
           {saveState || 'Les respostes es desen automàticament.'}
         </p>
       </header>
-      {data.questions.map((q, i) => (
-        <div
-          className="card stack"
-          key={q.id}
-          style={missing.includes(q.id) ? { outline: '2px solid #dc2626' } : undefined}
-          onCopy={q.config?.allowClipboard ? undefined : (event) => event.preventDefault()}
-          onCut={q.config?.allowClipboard ? undefined : (event) => event.preventDefault()}
-        >
-          <div
-            className={q.config?.allowClipboard ? undefined : 'take-quiz-question-prompt'}
-            onContextMenu={q.config?.allowClipboard ? undefined : (event) => event.preventDefault()}
-          >
-            <div className="review-question-title">
-              <span className="review-question-number">{String(i + 1).padStart(2, '0')}</span>
-              <div className="review-question-text"><b>{q.text}</b> {q.required && <span className="error">*</span>} <span className="muted">({formatGrade(q.points)} pt)</span></div>
+      <PagedQuestions
+        pages={buildPages(data.questions, data.groups)}
+        page={page}
+        onPage={setPage}
+        render={renderQuestion}
+        isIncomplete={(q) => q.required && !isAnswered(q, answers[q.id])}
+        flagAll={missing.length > 0}
+        footer={(
+          <div className="take-quiz-finish">
+            <div className="take-quiz-finish-copy">
+              <h3>Finalitza l'entrega</h3>
+              <p className="muted">Quan l'enviïs, ja no podràs modificar les respostes.</p>
+            </div>
+            <div className="take-quiz-finish-actions">
+              {msg && <p className="error" role="alert">{msg}</p>}
+              <button onClick={submit}>Envia l'entrega</button>
             </div>
           </div>
-          {q.type !== 'IMAGE_LABEL' && q.type !== 'DRAWING' && q.imageUrl && <img src={`/api/files/${q.imageUrl}`} alt="" style={{ maxWidth: '100%' }} />}
-          <div className="question-response">
-            <QuestionInput
-              q={q}
-              attemptId={data.id}
-              value={answers[q.id]?.value}
-              fileName={answers[q.id]?.fileUrl}
-              pasteBlockedField={pasteBlocked?.questionId === q.id ? pasteBlocked.field : null}
-              onPasteBlocked={(field) => setPasteBlocked({ questionId: q.id, field })}
-              onChange={(v) => change(q.id, v)}
-              onFile={(f) => setAnswers((a) => ({ ...a, [q.id]: { value: 'file', fileUrl: f } }))}
-            />
-          </div>
-        </div>
-      ))}
-      <div className="take-quiz-finish">
-        <div className="take-quiz-finish-copy">
-          <h3>Finalitza l'entrega</h3>
-          <p className="muted">Quan l'enviïs, ja no podràs modificar les respostes.</p>
-        </div>
-        <div className="take-quiz-finish-actions">
-          {msg && <p className="error" role="alert">{msg}</p>}
-          <button onClick={submit}>Envia l'entrega</button>
-        </div>
-      </div>
+        )}
+      />
     </div>
   );
 }
