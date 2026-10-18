@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { upload, fileUrl } from '../api';
 import { ImageWithPoints } from './QuestionInput.jsx';
 import DrawingBoard from './DrawingBoard.jsx';
-import MarkdownText from './MarkdownText.jsx';
 import { TYPE_LABELS, uid, toPayload, validateDraft, countBlanks } from '../questionModel';
 
 export default function QuestionEditor({ initial, onSave, onCancel }) {
@@ -43,7 +42,6 @@ export default function QuestionEditor({ initial, onSave, onCancel }) {
     <div className="card stack question-editor-card">
       <b>{TYPE_LABELS[d.type]}</b>
       <label>Enunciat<textarea value={d.text} onChange={(e) => set({ text: e.target.value })} /></label>
-      {d.text && <MarkdownText>{d.text}</MarkdownText>}
       <div className="row">
         <label>Punts <input type="number" min="0" step="0.25" value={d.points} onChange={(e) => set({ points: e.target.value })} /></label>
         <label><input type="checkbox" checked={d.required} onChange={(e) => set({ required: e.target.checked })} /> Obligatòria</label>
