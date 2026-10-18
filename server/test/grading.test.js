@@ -46,6 +46,14 @@ test('IMAGE_LABEL i SHORT_TEXT normalitzats', () => {
   assert.strictEqual(scoreQuestion(q('SHORT_TEXT', { accepted: ['Àtom'] }), 'atom').score, 2);
 });
 
+test('FILL_BLANKS puntua cada buit amb alternatives acceptades', () => {
+  const f = q('FILL_BLANKS', { blanks: [['més', 'mes'], ['soroll']] });
+  assert.strictEqual(scoreQuestion(f, [' Més ', 'Soroll']).score, 2);
+  assert.strictEqual(scoreQuestion(f, ['mes', 'res']).score, 1);
+  assert.strictEqual(scoreQuestion(f, ['', '']).answered, false);
+  assert.strictEqual(scoreQuestion(f, ['no', 'no'], 0.5).score, -1);
+});
+
 test('manual i nota final', () => {
   const l = q('LONG_TEXT', {});
   assert.ok(scoreQuestion(l, 'text').manual);

@@ -2,6 +2,8 @@ import React from 'react';
 import { fileUrl, upload } from '../api';
 import { usePrompt } from './PromptProvider.jsx';
 import DrawingBoard from './DrawingBoard.jsx';
+import MarkdownText from './MarkdownText.jsx';
+import { splitBlanks } from '../questionModel.js';
 
 export function ImageWithPoints({ src, points = [], onClick }) {
   return (
@@ -141,6 +143,26 @@ export default function QuestionInput({ q, value, onChange, attemptId, fileName,
           {pasteWarning('answer')}
         </div>
       );
+    case 'FILL_BLANKS': {
+      const parts = splitBlanks(q.text);
+      const values = Array.isArray(value) ? value : [];
+      const setBlank = (i, text) => onChange(Array.from({ length: parts.length - 1 }, (_, j) => (j === i ? text : values[j] ?? '')));
+      return (
+        <div className="question-input-field">
+          <div className="fill-blanks">
+            {parts.map((part, i) => (
+              <React.Fragment key={i}>
+                <MarkdownText inline>{part}</MarkdownText>
+                {i < parts.length - 1 && (
+                  <input type="text" className="fill-blank" maxLength={200} size={Math.max(10, (values[i] ?? '').length + 2)} aria-label={`Buit ${i + 1}`} disabled={disabled} value={values[i] ?? ''} onPaste={onPaste(`blank${i}`)} onBeforeInput={onBeforeInput(`blank${i}`)} onChange={onTextChange(`blank${i}`, values[i], (text) => setBlank(i, text))} />
+                )}
+              </React.Fragment>
+            ))}
+          </div>
+          {pasteBlockedField?.startsWith('blank') && pasteWarning(pasteBlockedField)}
+        </div>
+      );
+    }
     case 'CALCULATED':
       return (
         <div className="question-input-field">

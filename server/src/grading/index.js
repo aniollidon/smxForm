@@ -26,6 +26,8 @@ function isAnswered(type, value) {
     case 'CALCULATED':
     case 'LONG_TEXT':
       return String(value).trim() !== '';
+    case 'FILL_BLANKS':
+      return Array.isArray(value) && value.some((v) => String(v ?? '').trim() !== '');
     case 'IMAGE_UPLOAD':
       return !!value;
     case 'DRAWING':
@@ -86,6 +88,13 @@ function gradeQuestion(question, value) {
       if (!ids.length) break;
       const ok = ids.filter((p) => norm(value[p]) === norm(labels[p])).length;
       fraction = ok / ids.length;
+      break;
+    }
+    case 'FILL_BLANKS': {
+      const blanks = key.blanks || [];
+      if (!blanks.length || !Array.isArray(value)) break;
+      const ok = blanks.filter((accepted, i) => accepted.map(norm).includes(norm(value[i]))).length;
+      fraction = ok / blanks.length;
       break;
     }
     case 'SHORT_TEXT': {

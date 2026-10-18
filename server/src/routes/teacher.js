@@ -4,6 +4,7 @@ const { z } = require('zod');
 const prisma = require('../db');
 const classroom = require('../services/classroom');
 const { computeAttemptScore } = require('../grading');
+const { countBlanks } = require('../grading/blanks');
 const { regradeAttempt, getGradingStatus } = require('../grading/regrade');
 const { evaluateAnswers } = require('../services/llm');
 const { validateDefinition, personalize } = require('../grading/calculated');
@@ -15,7 +16,7 @@ router.use(requireTeacher);
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 const fail = (status, msg) => Object.assign(new Error(msg), { status });
 
-const TYPES = ['MCQ', 'TRUE_FALSE', 'MATCHING', 'ORDERING', 'IMAGE_LABEL', 'SHORT_TEXT', 'LONG_TEXT', 'IMAGE_UPLOAD', 'CALCULATED', 'DRAWING'];
+const TYPES = ['MCQ', 'TRUE_FALSE', 'MATCHING', 'ORDERING', 'IMAGE_LABEL', 'SHORT_TEXT', 'LONG_TEXT', 'IMAGE_UPLOAD', 'CALCULATED', 'DRAWING', 'FILL_BLANKS'];
 const id = z.union([z.string(), z.number()]).transform(String);
 const item = z.object({ id, text: z.string().max(500) });
 const clipboardConfig = { allowClipboard: z.boolean().default(false) };
@@ -31,6 +32,7 @@ const configSchemas = {
     ...clipboardConfig,
   }),
   SHORT_TEXT: z.object(clipboardConfig).passthrough(),
+  FILL_BLANKS: z.object(clipboardConfig).passthrough(),
   CALCULATED: z.object({
     variables: z.array(z.object({
       name: z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,19}$/),
@@ -60,6 +62,7 @@ const keySchemas = {
   ORDERING: z.object({ order: z.array(id).min(2).max(30), allOrNothing: z.boolean().default(false) }),
   IMAGE_LABEL: z.object({ labels: z.record(z.string()) }),
   SHORT_TEXT: z.object({ accepted: z.array(z.string()).default([]), regex: z.string().max(200).optional() }),
+  FILL_BLANKS: z.object({ blanks: z.array(z.array(z.string().trim().min(1).max(200)).min(1).max(20)).min(1).max(20) }),
   CALCULATED: z.object({
     formula: z.string().trim().min(1).max(500),
     tolerance: z.number().min(0).max(1e9).default(0),
@@ -95,6 +98,7 @@ function parseQuestion(body) {
     if (ids.size !== q.config.items.length || q.answerKey.order.length !== ids.size || !q.answerKey.order.every((entryId) => ids.has(entryId)) || new Set(q.answerKey.order).size !== ids.size) throw fail(400, 'Ordre invàlid');
   }
   if (q.type === 'DRAWING' && !q.imageUrl) throw fail(400, 'Cal una imatge base per dibuixar');
+  if (q.type === 'FILL_BLANKS' && countBlanks(q.text) !== q.answerKey.blanks.length) throw fail(400, 'El nombre de buits de l’enunciat no coincideix amb les respostes');
   if (q.type === 'CALCULATED') {
     const error = validateDefinition(q.text, q.config, q.answerKey);
     if (error) throw fail(400, error);
@@ -403,7 +407,7 @@ router.delete('/attempts/:aid', wrap(async (req, res) => {
 
 router.get('/questions/:qid/answers', wrap(async (req, res) => {
   const question = await ownQuestion(req);
-  if (!['SHORT_TEXT', 'LONG_TEXT', 'IMAGE_UPLOAD', 'DRAWING'].includes(question.type)) throw fail(400, 'Aquesta pregunta no té correcció manual');
+  if (!['SHORT_TEXT', 'FILL_BLANKS', 'LONG_TEXT', 'IMAGE_UPLOAD', 'DRAWING'].includes(question.type)) throw fail(400, 'Aquesta pregunta no té correcció manual');
   const answers = await prisma.answer.findMany({
     where: { questionId: question.id, attempt: { status: { not: 'IN_PROGRESS' } } },
     include: { attempt: { include: { user: { select: { name: true, email: true } } } } },

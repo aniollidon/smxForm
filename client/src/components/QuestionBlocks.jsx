@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { blockQuestions, buildBlocks } from '../layout.js';
+import MarkdownText from './MarkdownText.jsx';
 
 export function Blocks({ blocks, render }) {
   return blocks.map((block) => {
@@ -7,7 +8,7 @@ export function Blocks({ blocks, render }) {
     if (block.type === 'group') {
       return (
         <div className="card group-card" key={`g-${block.group.id}-${block.entries[0].index}`}>
-          <p className="group-text">{block.group.text}</p>
+          <div className="group-text"><MarkdownText>{block.group.text}</MarkdownText></div>
           <div className="group-children">{block.entries.map(({ item, index }) => render(item, index, true))}</div>
         </div>
       );

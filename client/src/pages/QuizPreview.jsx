@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api, fileUrl } from '../api';
 import QuestionInput from '../components/QuestionInput.jsx';
+import MarkdownText from '../components/MarkdownText.jsx';
 import { formatGrade } from '../formatGrade.js';
 import PagedQuestions from '../components/QuestionBlocks.jsx';
 import { buildPages } from '../layout.js';
@@ -41,7 +42,7 @@ export default function QuizPreview() {
             <div className="review-question-title">
               <span className="review-question-number">{String(index + 1).padStart(2, '0')}</span>
               <div className="review-question-text">
-                <b>{question.text}</b>{' '}
+                {question.type !== 'FILL_BLANKS' && <MarkdownText>{question.text}</MarkdownText>}{' '}
                 {question.required && <span className="error">*</span>}{' '}
                 <span className="muted">({formatGrade(question.points)} pt)</span>
               </div>

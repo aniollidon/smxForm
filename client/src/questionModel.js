@@ -12,7 +12,14 @@ export const TYPE_LABELS = {
   LONG_TEXT: 'Text llarg',
   IMAGE_UPLOAD: 'Pujar imatge',
   DRAWING: 'Dibuixar sobre imatge',
+  FILL_BLANKS: 'Omplir buits',
 };
+
+// Un buit és una seqüència de 3 o més guions baixos a l'enunciat.
+export const BLANK_PATTERN = /_{3,}/g;
+export const countBlanks = (text) => (String(text).match(BLANK_PATTERN) || []).length;
+export const splitBlanks = (text) => String(text).split(/_{3,}/);
+const alternatives = (s) => String(s ?? '').split('|').map((x) => x.trim()).filter(Boolean);
 
 const lines = (s) => s.split('\n').map((x) => x.trim()).filter(Boolean);
 
@@ -31,6 +38,8 @@ export function emptyDraft(type) {
       return { ...base, points_: [], predefined: false, extraLabels: '' };
     case 'SHORT_TEXT':
       return { ...base, accepted: '', regex: '' };
+    case 'FILL_BLANKS':
+      return { ...base, blanks: [] };
     case 'CALCULATED':
       return { ...base, vars: [{ name: 'a', mode: 'range', min: 1, max: 10, decimals: 0, values: '' }], formula: '', tolerance: 0, toleranceType: 'nominal' };
     case 'LONG_TEXT':
@@ -74,6 +83,8 @@ export function fromQuestion(q) {
     }
     case 'SHORT_TEXT':
       return { ...base, accepted: (k.accepted || []).join('\n'), regex: k.regex || '' };
+    case 'FILL_BLANKS':
+      return { ...base, blanks: (k.blanks || []).map((list) => list.join(' | ')) };
     case 'LONG_TEXT':
       return { ...base, reference: k.reference || '' };
     case 'DRAWING':
@@ -117,6 +128,9 @@ export function toPayload(d) {
     }
     case 'SHORT_TEXT':
       p.answerKey = { accepted: lines(d.accepted), ...(d.regex ? { regex: d.regex } : {}) };
+      break;
+    case 'FILL_BLANKS':
+      p.answerKey = { blanks: Array.from({ length: countBlanks(d.text) }, (_, i) => alternatives(d.blanks[i])) };
       break;
     case 'LONG_TEXT':
       p.answerKey = { reference: d.reference };
@@ -162,6 +176,16 @@ export function validateDraft(d) {
     case 'SHORT_TEXT':
       if (!lines(d.accepted).length && !d.regex) return 'Indica almenys una resposta acceptada';
       break;
+    case 'FILL_BLANKS': {
+      const n = countBlanks(d.text);
+      if (n < 1 || n > 20) return 'L\'enunciat ha de tenir d\'1 a 20 buits (escriu ___ on vulguis un buit)';
+      for (let i = 0; i < n; i++) {
+        const list = alternatives(d.blanks[i]);
+        if (!list.length) return `Indica la resposta del buit ${i + 1}`;
+        if (list.length > 20 || list.some((x) => x.length > 200)) return `El buit ${i + 1} admet fins a 20 respostes de 200 caràcters`;
+      }
+      break;
+    }
     case 'CALCULATED': {
       if (!d.vars.length) return 'Defineix almenys una variable';
       const names = new Set();

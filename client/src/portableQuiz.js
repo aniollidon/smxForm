@@ -1,4 +1,4 @@
-import { uid, validateDraft } from './questionModel.js';
+import { countBlanks, uid, validateDraft } from './questionModel.js';
 
 export const PORTABLE_FORMAT = 'palamForm.quiz';
 export const PORTABLE_VERSION = 1;
@@ -67,6 +67,8 @@ export function exportQuestion(question, image = null) {
     }
     case 'SHORT_TEXT':
       return { ...common, accepted: answer.accepted || [], ...(answer.regex ? { regex: answer.regex } : {}) };
+    case 'FILL_BLANKS':
+      return { ...common, blanks: answer.blanks };
     case 'LONG_TEXT':
       return { ...common, reference: answer.reference || '' };
     case 'CALCULATED':
@@ -222,6 +224,12 @@ export function importQuestionToDraft(question) {
         try { new RegExp(question.regex); } catch { throw new Error('SHORT_TEXT: «regex» no és una expressió regular vàlida.'); }
       }
       draft = { ...base, accepted: (question.accepted || []).join('\n'), regex: question.regex || '' };
+      break;
+    case 'FILL_BLANKS':
+      requireValue(Array.isArray(question.blanks) && question.blanks.length >= 1 && question.blanks.length <= 20, 'FILL_BLANKS: «blanks» ha de tenir entre 1 i 20 buits.');
+      requireValue(question.blanks.every((list) => Array.isArray(list) && list.length >= 1 && list.length <= 20 && list.every((item) => typeof item === 'string' && item.trim() && item.length <= 200 && !item.includes('|'))), 'FILL_BLANKS: cada buit necessita d’1 a 20 respostes de text no buides, sense el caràcter «|».');
+      requireValue(countBlanks(question.text) === question.blanks.length, 'FILL_BLANKS: el nombre de buits (___) de l’enunciat ha de coincidir amb el de «blanks».');
+      draft = { ...base, blanks: question.blanks.map((list) => list.join(' | ')) };
       break;
     case 'CALCULATED':
       requireValue(Array.isArray(question.variables) && question.variables.length >= 1 && question.variables.length <= 20, 'CALCULATED: «variables» ha de tenir entre 1 i 20 variables.');

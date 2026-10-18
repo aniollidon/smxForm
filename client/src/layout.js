@@ -35,6 +35,7 @@ export function isAnswered(q, answer) {
     case 'MATCHING':
     case 'ORDERING':
     case 'IMAGE_LABEL': return typeof value === 'object' && Object.values(value).some((v) => v !== '' && v != null);
+    case 'FILL_BLANKS': return Array.isArray(value) && value.some((v) => String(v ?? '').trim() !== '');
     case 'SHORT_TEXT':
     case 'CALCULATED':
     case 'LONG_TEXT': return String(value).trim() !== '';

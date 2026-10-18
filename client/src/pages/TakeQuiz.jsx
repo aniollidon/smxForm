@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, fileUrl } from '../api';
 import QuestionInput, { ImageWithPoints } from '../components/QuestionInput.jsx';
 import DrawingBoard from '../components/DrawingBoard.jsx';
+import MarkdownText from '../components/MarkdownText.jsx';
 import { formatGrade } from '../formatGrade.js';
 import { usePrompt } from '../components/PromptProvider.jsx';
 import PagedQuestions, { QuestionFlow } from '../components/QuestionBlocks.jsx';
@@ -25,6 +26,7 @@ function PlainAnswer({ q, value }) {
     case 'TRUE_FALSE': return value == null ? null : value ? 'Cert' : 'Fals';
     case 'MATCHING': return value ? <ul>{Object.entries(value).map(([l, r]) => <li key={l}>{text('left', l)} → {text('right', r)}</li>)}</ul> : null;
     case 'ORDERING': return Array.isArray(value) ? <ol>{value.map((id) => <li key={id}>{text('items', id)}</li>)}</ol> : null;
+    case 'FILL_BLANKS': return Array.isArray(value) ? <ol>{value.map((v, i) => <li key={i}>{v || '—'}</li>)}</ol> : null;
     case 'IMAGE_LABEL': return (
       <div className="answer-image-labels">
         {q.imageUrl && <ImageWithPoints src={fileUrl(q.imageUrl)} points={q.config?.points || []} />}
@@ -42,7 +44,7 @@ function QuestionResult({ q, index, inGroup }) {
   if (!q.answerKey) {
     return (
       <div className={cardClass} key={q.id}>
-        <div className="review-question-title"><span className="review-question-number">{String(index + 1).padStart(2, '0')}</span><b>{q.text}</b></div>
+        <div className="review-question-title"><span className="review-question-number">{String(index + 1).padStart(2, '0')}</span><MarkdownText>{q.text}</MarkdownText></div>
         <AnswerBlock label="La teva resposta"><PlainAnswer q={q} value={q.value} /></AnswerBlock>
       </div>
     );
@@ -141,6 +143,24 @@ function QuestionResult({ q, index, inGroup }) {
         </div>
       );
       break;
+    case 'FILL_BLANKS':
+      answers = (
+        <div className="answer-matches">
+          {(key.blanks || []).map((accepted, index) => {
+            const given = Array.isArray(value) ? value[index] : '';
+            const norm = (s) => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+            const isCorrect = accepted.some((a) => norm(a) === norm(given));
+            return (
+              <div className={`answer-match${isCorrect ? ' answer-correct' : ' answer-incorrect'}`} key={index}>
+                <strong>Buit {index + 1}</strong>
+                <span>{given || 'Sense resposta'}</span>
+                {!isCorrect && <span className="answer-expected">Correcte: {accepted.join(' / ')}</span>}
+              </div>
+            );
+          })}
+        </div>
+      );
+      break;
     case 'SHORT_TEXT':
       answers = (
         <div className="answer-columns">
@@ -180,7 +200,7 @@ function QuestionResult({ q, index, inGroup }) {
   return (
     <div className={cardClass}>
       <div className="row between result-heading">
-        <div className="review-question-title"><span className="review-question-number">{String(index + 1).padStart(2, '0')}</span><b>{q.text}</b></div>
+        <div className="review-question-title"><span className="review-question-number">{String(index + 1).padStart(2, '0')}</span><MarkdownText>{q.text}</MarkdownText></div>
         <span className={`result-score result-${scoreTone}`}>{formatGrade(q.score)} / {formatGrade(q.points)} · {status}</span>
       </div>
       {answers}
@@ -304,7 +324,7 @@ export default function TakeQuiz() {
       >
         <div className="review-question-title">
           <span className="review-question-number">{String(i + 1).padStart(2, '0')}</span>
-          <div className="review-question-text"><b>{q.text}</b> {q.required && <span className="error">*</span>} <span className="muted">({formatGrade(q.points)} pt)</span></div>
+          <div className="review-question-text">{q.type !== 'FILL_BLANKS' && <MarkdownText>{q.text}</MarkdownText>} {q.required && <span className="error">*</span>} <span className="muted">({formatGrade(q.points)} pt)</span></div>
         </div>
       </div>
       {q.type !== 'IMAGE_LABEL' && q.type !== 'DRAWING' && q.imageUrl && <img src={`/api/files/${q.imageUrl}`} alt="" style={{ maxWidth: '100%' }} />}

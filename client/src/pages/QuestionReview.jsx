@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, fileUrl } from '../api';
 import { formatGrade } from '../formatGrade.js';
 import DrawingBoard from '../components/DrawingBoard.jsx';
+import MarkdownText from '../components/MarkdownText.jsx';
 
 const defaultCriteria = 'Avalua l’exactitud, la pertinència i la completesa de la resposta respecte de l’enunciat i la resposta esperada. Assigna una puntuació proporcional als punts assolits i justifica-la breument.';
 
@@ -56,7 +57,7 @@ function AnswerValue({ answer, question }) {
       ? <DrawingBoard src={fileUrl(question.imageUrl)} color={question.config.color} width={question.config.width} value={answer.value} readOnly />
       : <i>Sense resposta</i>;
   }
-  return <>{String(answer.value)}</>;
+  return <>{Array.isArray(answer.value) ? answer.value.map((v) => v || '—').join(' · ') : String(answer.value)}</>;
 }
 
 export default function QuestionReview() {
@@ -184,7 +185,7 @@ export default function QuestionReview() {
       <header className="question-review-header">
         <div className="question-review-title">
           <span className="eyebrow">{data.question.type}</span>
-          <div className="question-review-heading"><span className="review-question-number">{String(data.question.order + 1).padStart(2, '0')}</span><h1>{data.question.text}</h1></div>
+          <div className="question-review-heading"><span className="review-question-number">{String(data.question.order + 1).padStart(2, '0')}</span><div className="question-review-prompt"><MarkdownText>{data.question.text}</MarkdownText></div></div>
           <p>{formatGrade(data.question.points)} punts · Respostes de tots els intents enviats</p>
           {expectedAnswer && <div className="review-reference question-review-reference"><span>RESPOSTA ESPERADA</span>{expectedAnswer}</div>}
         </div>

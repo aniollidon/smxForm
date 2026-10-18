@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { upload, fileUrl } from '../api';
 import { ImageWithPoints } from './QuestionInput.jsx';
 import DrawingBoard from './DrawingBoard.jsx';
-import { TYPE_LABELS, uid, toPayload, validateDraft } from '../questionModel';
+import MarkdownText from './MarkdownText.jsx';
+import { TYPE_LABELS, uid, toPayload, validateDraft, countBlanks } from '../questionModel';
 
 export default function QuestionEditor({ initial, onSave, onCancel }) {
   const [d, setD] = useState(initial);
@@ -42,6 +43,7 @@ export default function QuestionEditor({ initial, onSave, onCancel }) {
     <div className="card stack question-editor-card">
       <b>{TYPE_LABELS[d.type]}</b>
       <label>Enunciat<textarea value={d.text} onChange={(e) => set({ text: e.target.value })} /></label>
+      {d.text && <MarkdownText>{d.text}</MarkdownText>}
       <div className="row">
         <label>Punts <input type="number" min="0" step="0.25" value={d.points} onChange={(e) => set({ points: e.target.value })} /></label>
         <label><input type="checkbox" checked={d.required} onChange={(e) => set({ required: e.target.checked })} /> Obligatòria</label>
@@ -150,6 +152,18 @@ export default function QuestionEditor({ initial, onSave, onCancel }) {
         </div>
       )}
 
+      {d.type === 'FILL_BLANKS' && (
+        <div className="stack">
+          <p className="muted">Escriu l’enunciat i marca cada buit amb tres o més guions baixos (<code>___</code>). L’alumne ompli els buits dins la frase.</p>
+          {countBlanks(d.text) === 0 && <p className="muted">Encara no hi ha cap buit a l’enunciat.</p>}
+          {Array.from({ length: Math.min(countBlanks(d.text), 20) }, (_, i) => (
+            <label key={i}>Buit {i + 1}: respostes acceptades (separades per <code>|</code>; ignora majúscules i accents)
+              <input type="text" maxLength={400} value={d.blanks[i] ?? ''} onChange={(e) => set({ blanks: Array.from({ length: Math.max(d.blanks.length, i + 1) }, (_, j) => (j === i ? e.target.value : d.blanks[j] ?? '')) })} />
+            </label>
+          ))}
+        </div>
+      )}
+
       {d.type === 'CALCULATED' && (
         <div className="stack">
           <p className="muted">Usa variables a l’enunciat amb claus, p. ex. {'{a}'}; cada alumne en rep un valor aleatori del rang o de la llista. També pots escriure càlculs a l’enunciat amb {'{=2*{a}}'}.</p>
@@ -207,7 +221,7 @@ export default function QuestionEditor({ initial, onSave, onCancel }) {
       {d.type === 'LONG_TEXT' && (
         <label>Resposta de referència (per al corrector)<textarea value={d.reference} onChange={(e) => set({ reference: e.target.value })} /></label>
       )}
-      {d.type === 'SHORT_TEXT' && <p className="muted">S’autoavalua; el professor pot revisar i ajustar la puntuació manualment si cal.</p>}
+      {(d.type === 'SHORT_TEXT' || d.type === 'FILL_BLANKS') && <p className="muted">S’autoavalua; el professor pot revisar i ajustar la puntuació manualment si cal.</p>}
       {(d.type === 'LONG_TEXT' || d.type === 'IMAGE_UPLOAD' || d.type === 'DRAWING') && <p className="muted">Aquesta pregunta es corregeix manualment.</p>}
 
       {err && <p className="error">{err}</p>}

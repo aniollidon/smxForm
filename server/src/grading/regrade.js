@@ -16,7 +16,7 @@ function regradeAttempt(quiz, questions, answers, seed = 0) {
     const answerKey = parseJson(question.answerKey);
     const gradingValue = question.type === 'IMAGE_UPLOAD' ? !!existing.fileUrl : value;
     const result = scoreQuestion({ ...question, answerKey, seed }, gradingValue, quiz.negativePenalty);
-    const reviewedShortTextUnchanged = question.type === 'SHORT_TEXT'
+    const reviewedShortTextUnchanged = ['SHORT_TEXT', 'FILL_BLANKS'].includes(question.type)
       && existing.manuallyReviewed
       && existing.questionGradingVersion === question.gradingVersion;
     const manualAnswerUnchanged = result.manual
@@ -39,7 +39,7 @@ function regradeAttempt(quiz, questions, answers, seed = 0) {
         score: result.score === 0 ? 0 : result.score,
         needsReview: false,
         questionGradingVersion: question.gradingVersion,
-        ...(question.type === 'SHORT_TEXT' ? { manuallyReviewed: false } : {}),
+        ...(['SHORT_TEXT', 'FILL_BLANKS'].includes(question.type) ? { manuallyReviewed: false } : {}),
           ...(existing.llmReviewed ? { llmReviewed: false } : {}),
       };
     updates.push({ id: existing.id, data });

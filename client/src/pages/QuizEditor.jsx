@@ -224,7 +224,7 @@ export default function QuizEditor() {
         {React.Children.toArray(controls)}
         <button className="secondary" onClick={() => setEditing(fromQuestion(q))}>Edita</button>
         <ActionMenu items={[
-          ['SHORT_TEXT', 'LONG_TEXT', 'IMAGE_UPLOAD', 'DRAWING'].includes(q.type) && { label: 'Veure respostes ↗', to: `/t/quiz/${id}/question/${q.id}/answers` },
+          ['SHORT_TEXT', 'FILL_BLANKS', 'LONG_TEXT', 'IMAGE_UPLOAD', 'DRAWING'].includes(q.type) && { label: 'Veure respostes ↗', to: `/t/quiz/${id}/question/${q.id}/answers` },
           ...menu,
           { label: 'Esborra la pregunta', danger: true, onClick: () => del(q.id) },
         ]} />

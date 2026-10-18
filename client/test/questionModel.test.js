@@ -46,3 +46,12 @@ test('calculated question drafts preserve list generation and legacy ranges', ()
   const legacy = fromQuestion({ ...toPayload({ ...draft, vars: [{ name: 'x', min: 1, max: 10, decimals: 0, values: '' }] }), id: 1 });
   assert.equal(legacy.vars[0].mode, 'range');
 });
+test('fill-in-the-blanks drafts map each blank to its accepted alternatives', () => {
+  const draft = { ...emptyDraft('FILL_BLANKS'), text: 'Un batch petit dona ___ actualitzacions i ___.', blanks: ['més | mes', 'soroll'] };
+  assert.equal(validateDraft(draft), null);
+  const payload = toPayload(draft);
+  assert.deepEqual(payload.answerKey, { blanks: [['més', 'mes'], ['soroll']] });
+  assert.deepEqual(fromQuestion({ ...payload, id: 1 }).blanks, ['més | mes', 'soroll']);
+  assert.match(validateDraft({ ...draft, blanks: ['més'] }), /buit 2/);
+  assert.match(validateDraft({ ...draft, text: 'Sense buits' }), /buits/);
+});

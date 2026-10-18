@@ -6,6 +6,7 @@ import { ImageWithPoints } from '../components/QuestionInput.jsx';
 import DrawingBoard from '../components/DrawingBoard.jsx';
 import { formatGrade } from '../formatGrade.js';
 import { QuestionFlow } from '../components/QuestionBlocks.jsx';
+import MarkdownText from '../components/MarkdownText.jsx';
 
 const optText = (q, list, id) => q.config[list].find((x) => x.id === id)?.text ?? id;
 
@@ -27,6 +28,7 @@ function Value({ a }) {
         </div>
       );
     case 'CALCULATED': return <p>{String(value)} <span className="muted">(correcte: {q.answerKey.expected})</span></p>;
+    case 'FILL_BLANKS': return <ol>{q.answerKey.blanks.map((accepted, i) => <li key={i}>{value[i] || '—'} <span className="muted">(correcte: {accepted.join(' / ')})</span></li>)}</ol>;
     default: return <p style={{ whiteSpace: 'pre-wrap' }}>{String(value)}</p>;
   }
 }
@@ -63,7 +65,7 @@ export default function AttemptReview() {
   const { data, isLoading } = useQuery({ queryKey: ['attempt-review', id], queryFn: () => api(`/api/teacher/attempts/${id}`) });
   if (isLoading) return <p>Carregant…</p>;
   const answers = [...data.answers].sort((a, b) => a.question.order - b.question.order);
-  const manual = (a) => ['SHORT_TEXT', 'LONG_TEXT', 'IMAGE_UPLOAD', 'DRAWING'].includes(a.question.type);
+  const manual = (a) => ['SHORT_TEXT', 'FILL_BLANKS', 'LONG_TEXT', 'IMAGE_UPLOAD', 'DRAWING'].includes(a.question.type);
   const pendingCount = answers.filter((a) => manual(a) && a.needsReview).length;
   const status = { NEEDS_REVIEW: 'Pendent de correcció', GRADED: 'Corregit', SUBMITTED: 'Enviat' }[data.status] || data.status;
   const refresh = () => qc.invalidateQueries({ queryKey: ['attempt-review', id] });
@@ -90,14 +92,14 @@ export default function AttemptReview() {
       <QuestionFlow items={answers} groups={data.quiz.groups} get={(a) => a.question} render={(a, index, inGroup) => (
         <article className={`${inGroup ? 'group-question' : 'card'} review-question${a.needsReview ? ' is-pending' : ''}`} key={a.id}>
           <div className="review-question-heading">
-            <div className="review-question-title"><span className="review-question-number">{String(index + 1).padStart(2, '0')}</span><h3>{a.question.text}</h3></div>
+            <div className="review-question-title"><span className="review-question-number">{String(index + 1).padStart(2, '0')}</span><MarkdownText>{a.question.text}</MarkdownText></div>
             <span className={`review-score${a.needsReview ? ' is-pending' : a.score != null && a.score <= 0 ? ' is-negative' : ''}`}>{a.score == null ? 'Pendent' : formatGrade(a.score)} <i>/ {formatGrade(a.question.points)}</i></span>
           </div>
           <div className="review-answer"><Value a={a} /></div>
           {manual(a) && a.question.answerKey.reference && <p className="review-reference"><span>REFERÈNCIA</span>{a.question.answerKey.reference}</p>}
           {manual(a) && (
             <div className="review-grading">
-              <div className="review-grading-heading"><span className="eyebrow">{a.question.type === 'SHORT_TEXT' ? 'REVISIÓ DOCENT OPCIONAL' : "CORRECCIÓ D'AQUEST ALUMNE"}</span><Link to={`/t/quiz/${data.quizId}/question/${a.question.id}/answers`}>Totes les respostes d'aquesta pregunta →</Link></div>
+              <div className="review-grading-heading"><span className="eyebrow">{['SHORT_TEXT', 'FILL_BLANKS'].includes(a.question.type) ? 'REVISIÓ DOCENT OPCIONAL' : "CORRECCIÓ D'AQUEST ALUMNE"}</span><Link to={`/t/quiz/${data.quizId}/question/${a.question.id}/answers`}>Totes les respostes d'aquesta pregunta →</Link></div>
               <ReviewForm a={a} onDone={refresh} />
             </div>
           )}

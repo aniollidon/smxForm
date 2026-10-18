@@ -68,7 +68,7 @@ model Question {
   sectionTitle   String? // si està definit, aquí comença una secció nova
   groupId        Int?
   group          QuestionGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
-  type           String // MCQ | TRUE_FALSE | MATCHING | IMAGE_LABEL | SHORT_TEXT | LONG_TEXT | IMAGE_UPLOAD
+  type           String // MCQ | TRUE_FALSE | MATCHING | IMAGE_LABEL | SHORT_TEXT | LONG_TEXT | IMAGE_UPLOAD | FILL_BLANKS
   text           String
   imageUrl       String?
   points         Float    @default(1)
