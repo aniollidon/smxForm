@@ -80,13 +80,49 @@ function AnswerValue({ answer, question }) {
   }
 }
 
+function getReferenceAnswer(question) {
+  const { answerKey, config, type } = question;
+  switch (type) {
+    case 'MCQ':
+      return (answerKey.correct || []).map((id) => config.options.find((option) => String(option.id) === String(id))?.text ?? id).join(', ');
+    case 'TRUE_FALSE':
+      return answerKey.correct === undefined ? '' : answerKey.correct ? 'Cert' : 'Fals';
+    case 'MATCHING':
+      return Object.entries(answerKey.pairs || {}).map(([leftId, rightId]) => {
+        const left = config.left.find((item) => String(item.id) === String(leftId))?.text ?? leftId;
+        const right = config.right.find((item) => String(item.id) === String(rightId))?.text ?? rightId;
+        return `${left} → ${right}`;
+      }).join('\n');
+    case 'ORDERING':
+      return (answerKey.order || []).map((id, index) => {
+        const text = config.items.find((item) => String(item.id) === String(id))?.text ?? id;
+        return `${index + 1}. ${text}`;
+      }).join('\n');
+    case 'IMAGE_LABEL':
+      return config.points.map((point, index) => `${index + 1}: ${answerKey.labels?.[point.id] || '—'}`).join('\n');
+    case 'SHORT_TEXT':
+      return [
+        ...(answerKey.accepted || []),
+        ...(answerKey.regex ? [`Expressió regular: ${answerKey.regex}`] : []),
+      ].join('\n');
+    case 'FILL_BLANKS':
+      return (answerKey.blanks || []).map((alternatives, index) => `${index + 1}. ${alternatives.join(' / ')}`).join('\n');
+    case 'CALCULATED':
+      return answerKey.formula ? `Fórmula: ${answerKey.formula}\nEl resultat concret varia segons l’intent.` : '';
+    case 'LONG_TEXT':
+      return answerKey.reference || '';
+    default:
+      return '';
+  }
+}
+
 export default function QuestionReview() {
   const { id, qid } = useParams();
   const queryClient = useQueryClient();
   const [criteria, setCriteria] = useState(defaultCriteria);
   const [savedCriteria, setSavedCriteria] = useState(defaultCriteria);
   const [pendingOnly, setPendingOnly] = useState(false);
-  const [gradingMode, setGradingMode] = useState('llm');
+  const [gradingMode, setGradingMode] = useState('manual');
   const [selectedAnswerIds, setSelectedAnswerIds] = useState([]);
   const [bulkScore, setBulkScore] = useState('');
   const [bulkFeedback, setBulkFeedback] = useState('');
@@ -109,9 +145,7 @@ export default function QuestionReview() {
 
   useEffect(() => {
     if (!data?.question) return;
-    setSelectedAnswerIds(data.answers
-      .filter((answer) => answer.needsReview && typeof answer.value === 'string' && answer.value.trim())
-      .map((answer) => answer.id));
+    setSelectedAnswerIds([]);
   }, [data?.question?.id]);
 
   if (isLoading) return <p>Carregant respostes…</p>;
@@ -206,12 +240,7 @@ export default function QuestionReview() {
     }
   };
 
-  const expectedAnswer = data.question.type === 'LONG_TEXT'
-    ? data.question.answerKey?.reference
-    : [
-      ...(data.question.answerKey?.accepted || []),
-      ...(data.question.answerKey?.regex ? [`Expressió regular: ${data.question.answerKey.regex}`] : []),
-    ].join('\n');
+  const expectedAnswer = getReferenceAnswer(data.question);
   const answerSaved = (answerId) => {
     setSelectedAnswerIds((current) => current.filter((selectedId) => selectedId !== answerId));
     return refresh();
@@ -231,9 +260,17 @@ export default function QuestionReview() {
       : [...current, answerId]);
   };
   const toggleCardSelection = (event, answerId) => {
-    if (event.target.closest('a, button, input, textarea, select, label')) return;
+    if (event.target.closest('a, button, input, textarea, select, label, .question-answer-form')) return;
     if (gradingWithAi || savingManual) return;
+    if (gradingMode === 'manual') {
+      selectManualAnswer(answerId);
+      return;
+    }
+    if (gradingMode === 'llm' && !selectableAnswerIds.has(answerId)) return;
     toggleAnswerSelection(answerId);
+  };
+  const selectManualAnswer = (answerId) => {
+    setSelectedAnswerIds((current) => current.includes(answerId) ? [] : [answerId]);
   };
   return (
     <div className="question-review">
@@ -249,25 +286,26 @@ export default function QuestionReview() {
       </header>
       <div className="question-review-toolbar">
         <div className="question-review-controls">
-          {supportsAiGrading && <div className="question-review-mode" role="group" aria-label="Mode de correcció">
-            <button type="button" className={gradingMode === 'llm' ? 'is-active' : ''} aria-pressed={gradingMode === 'llm'} onClick={() => { setGradingMode('llm'); setSelectedAnswerIds([]); }}>Avaluació amb LLM</button>
+          <div className="question-review-mode" role="group" aria-label="Mode de correcció">
             <button type="button" className={gradingMode === 'manual' ? 'is-active' : ''} aria-pressed={gradingMode === 'manual'} onClick={() => { setGradingMode('manual'); setSelectedAnswerIds([]); }}>Avaluació manual</button>
-          </div>}
+            <button type="button" className={gradingMode === 'bulk' ? 'is-active' : ''} aria-pressed={gradingMode === 'bulk'} onClick={() => { setGradingMode('bulk'); setSelectedAnswerIds([]); }}>Avaluació en bloc</button>
+            <button type="button" className={gradingMode === 'llm' ? 'is-active' : ''} aria-pressed={gradingMode === 'llm'} disabled={!supportsAiGrading} title={!supportsAiGrading ? 'Disponible només per a respostes de text' : undefined} onClick={() => { setGradingMode('llm'); setSelectedAnswerIds([]); }}>Avaluació amb LLM</button>
+          </div>
           <button className={`question-review-filter${pendingOnly ? ' is-active' : ''}`} aria-pressed={pendingOnly} onClick={() => setPendingOnly((current) => !current)}>
             <svg aria-hidden="true" viewBox="0 0 20 20"><path d="M3 4h14l-5.4 6.2v4.2l-3.2 1.7v-5.9L3 4Z" /></svg>
             Pendents <span>{pending}</span>
           </button>
-          <div className="question-review-selection-actions" aria-label="Selecció de respostes">
+          {gradingMode !== 'manual' && <div className="question-review-selection-actions" aria-label="Selecció de respostes">
             <button onClick={setPendingSelection} disabled={gradingWithAi || savingManual}>Pendents</button>
-            {supportsAiGrading && <button onClick={setLlmSelection} disabled={gradingWithAi || savingManual}>Avaluades amb LLM</button>}
+            {gradingMode === 'llm' && <button onClick={setLlmSelection} disabled={gradingWithAi || savingManual}>Avaluades amb LLM</button>}
             <button onClick={selectAllAnswers} disabled={gradingWithAi || savingManual}>Totes</button>
             <button onClick={() => setSelectedAnswerIds([])} disabled={!selectedAnswerIds.length || gradingWithAi || savingManual}>Cap</button>
-          </div>
+          </div>}
         </div>
         <span className="question-review-result-count">{visibleAnswers.length} de {answers.length} respostes</span>
       </div>
       {actionMessage && <p className="question-review-action-message" role="status">{actionMessage}</p>}
-      {supportsAiGrading && gradingMode === 'llm' && (
+      {gradingMode === 'llm' && supportsAiGrading && (
         <section className="question-ai-grading">
           <label className="question-ai-criteria">Criteris de correcció
             <textarea maxLength={5000} value={criteria} onChange={(event) => setCriteria(event.target.value)} />
@@ -296,7 +334,7 @@ export default function QuestionReview() {
           {actionError && <p className="error">{actionError}</p>}
         </section>
       )}
-      {(!supportsAiGrading || gradingMode === 'manual') && selectedAnswers.length > 1 && (
+      {gradingMode === 'bulk' && (
         <section className="question-ai-grading question-bulk-grading">
           <label className="question-ai-criteria">Puntuació comuna
             <input type="number" min="0" max={data.question.points} step="0.25" value={bulkScore} onChange={(event) => setBulkScore(event.target.value)} disabled={savingManual} />
@@ -343,10 +381,10 @@ export default function QuestionReview() {
                       className="question-answer-select"
                       type="checkbox"
                       checked={selectedAnswerIds.includes(answer.id)}
-                      disabled={gradingWithAi || savingManual || (supportsAiGrading && gradingMode === 'llm' && !selectableAnswerIds.has(answer.id))}
+                      disabled={gradingWithAi || savingManual || (gradingMode === 'llm' && !selectableAnswerIds.has(answer.id))}
                       aria-label={`Selecciona la resposta de ${answer.attempt.user.name || answer.attempt.user.email}`}
                       title="Selecciona resposta"
-                      onChange={() => toggleAnswerSelection(answer.id)}
+                      onChange={() => gradingMode === 'manual' ? selectManualAnswer(answer.id) : toggleAnswerSelection(answer.id)}
                     />
                   )}
                   <b>{answer.attempt.user.name || answer.attempt.user.email}</b>
@@ -356,11 +394,14 @@ export default function QuestionReview() {
                   <span className={`question-answer-state${!answer.needsReview ? ' is-reviewed' : ''}`}>
                     {answer.llmReviewed ? 'Avaluada amb LLM' : answer.needsReview ? 'Pendent de correcció' : answer.manuallyReviewed ? 'Revisada pel professor' : 'Puntuada'}
                   </span>
+                  <span className={`question-answer-score${answer.score == null ? ' is-pending' : ''}`}>
+                    {answer.score == null ? 'Sense nota' : `${formatGrade(answer.score)} / ${formatGrade(data.question.points)}`}
+                  </span>
                   <Link to={`/t/attempt/${answer.attemptId}`}>Obre l'intent ↗</Link>
                 </div>
               </header>
               <div className="question-answer-content"><AnswerValue answer={answer} question={data.question} /></div>
-              {(!supportsAiGrading || gradingMode === 'manual') && selectedAnswers.length === 1 && selectedAnswerIds.includes(answer.id) && (
+              {gradingMode === 'manual' && selectedAnswerIds.includes(answer.id) && (
                 <AnswerReviewForm answer={answer} question={data.question} onDone={() => answerSaved(answer.id)} />
               )}
             </article>
