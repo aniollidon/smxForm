@@ -42,7 +42,8 @@ function getInvalidNumericFields(question, value) {
   const invalid = [];
   const isNumeric = (answer) => Number.isFinite(parseAnswer(answer));
   const hasValue = (answer) => String(answer ?? '').trim() !== '';
-  if (['SHORT_TEXT', 'CALCULATED'].includes(question.type) && config.numericAnswer && hasValue(value) && !isNumeric(value)) {
+  const expectsNumeric = question.type === 'CALCULATED' ? config.numericAnswer !== false : config.numericAnswer;
+  if (['SHORT_TEXT', 'CALCULATED'].includes(question.type) && expectsNumeric && hasValue(value) && !isNumeric(value)) {
     invalid.push('answer');
   }
   if (question.type === 'FILL_BLANKS') {

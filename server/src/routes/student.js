@@ -38,7 +38,7 @@ function studentQuestion(q, seed) {
   const { answerKey, ...rest } = q;
   if (q.type === 'CALCULATED') {
     const { text } = instantiate({ ...q, answerKey: JSON.parse(answerKey) }, seed);
-    return { ...rest, text, config: { allowClipboard: !!config.allowClipboard, numericAnswer: !!config.numericAnswer } };
+    return { ...rest, text, config: { allowClipboard: !!config.allowClipboard, numericAnswer: config.numericAnswer !== false } };
   }
   return { ...rest, config };
 }

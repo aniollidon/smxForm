@@ -49,7 +49,7 @@ const configSchemas = {
         ctx.addIssue({ code: 'custom', message: 'La llista necessita almenys un valor' });
       }
     }).transform((variable) => ({ ...variable, min: variable.min ?? 0, max: variable.max ?? 0 }))).min(1).max(20),
-    numericAnswer: z.boolean().default(false),
+    numericAnswer: z.boolean().default(true),
     ...clipboardConfig,
   }),
   LONG_TEXT: z.object(clipboardConfig).passthrough(),

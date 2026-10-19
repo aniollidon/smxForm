@@ -37,7 +37,8 @@ export function invalidNumericFields(question, answer) {
   const check = (field, entry) => {
     if (String(entry ?? '').trim() && !isNumericAnswer(entry)) invalid.push(field);
   };
-  if (['SHORT_TEXT', 'CALCULATED'].includes(question.type) && config.numericAnswer) check('answer', value);
+  const expectsNumeric = question.type === 'CALCULATED' ? config.numericAnswer !== false : config.numericAnswer;
+  if (['SHORT_TEXT', 'CALCULATED'].includes(question.type) && expectsNumeric) check('answer', value);
   if (question.type === 'FILL_BLANKS') {
     (config.numericBlanks || []).forEach((numeric, index) => numeric && check(`blank${index}`, value?.[index]));
   }

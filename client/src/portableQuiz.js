@@ -72,7 +72,7 @@ export function exportQuestion(question, image = null) {
     case 'LONG_TEXT':
       return { ...common, reference: answer.reference || '' };
     case 'CALCULATED':
-      return { ...common, variables: config.variables, formula: answer.formula, tolerance: answer.tolerance ?? 0, toleranceType: answer.toleranceType || 'nominal', numericAnswer: !!config.numericAnswer };
+      return { ...common, variables: config.variables, formula: answer.formula, tolerance: answer.tolerance ?? 0, toleranceType: answer.toleranceType || 'nominal', numericAnswer: config.numericAnswer !== false };
     case 'IMAGE_UPLOAD':
       return common;
     case 'DRAWING':
@@ -242,8 +242,8 @@ export function importQuestionToDraft(question) {
       }), 'CALCULATED: cada variable necessita un rang vàlid o una llista d’1 a 100 nombres.');
       requireValue(typeof question.formula === 'string' && question.formula.trim() && question.formula.length <= 500, 'CALCULATED: «formula» ha de ser text de fins a 500 caràcters.');
       requireValue(Number.isFinite(question.tolerance ?? 0) && (question.tolerance ?? 0) >= 0 && ['nominal', 'relative'].includes(question.toleranceType ?? 'nominal'), 'CALCULATED: «tolerance» ha de ser ≥ 0 i «toleranceType» «nominal» o «relative».');
-      requireValue(typeof (question.numericAnswer ?? false) === 'boolean', 'CALCULATED: «numericAnswer» ha de ser booleà.');
-      draft = { ...base, vars: question.variables.map((v) => ({ name: v.name, mode: v.mode ?? 'range', min: v.min ?? Math.min(...(v.values || [1])), max: v.max ?? Math.max(...(v.values || [10])), decimals: v.decimals ?? 0, values: (v.values || []).join('\n') })), formula: question.formula, tolerance: question.tolerance ?? 0, toleranceType: question.toleranceType ?? 'nominal', numericAnswer: question.numericAnswer ?? false };
+      requireValue(typeof (question.numericAnswer ?? true) === 'boolean', 'CALCULATED: «numericAnswer» ha de ser booleà.');
+      draft = { ...base, vars: question.variables.map((v) => ({ name: v.name, mode: v.mode ?? 'range', min: v.min ?? Math.min(...(v.values || [1])), max: v.max ?? Math.max(...(v.values || [10])), decimals: v.decimals ?? 0, values: (v.values || []).join('\n') })), formula: question.formula, tolerance: question.tolerance ?? 0, toleranceType: question.toleranceType ?? 'nominal', numericAnswer: question.numericAnswer ?? true };
       break;
     case 'LONG_TEXT':
       requireValue(question.reference == null || typeof question.reference === 'string', 'LONG_TEXT: «reference» ha de ser text.');

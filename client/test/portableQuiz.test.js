@@ -71,12 +71,12 @@ test('round-trips numeric answer validation settings', () => {
       { type: 'IMAGE_LABEL', text: 'Etiqueta', points: 1, required: true, shuffleOptions: false, imageUrl: 'q_image.png', config: { points: [{ id: 'p1', x: 20, y: 30, numeric: true }], labels: null }, answerKey: { labels: { p1: '3.5' } } },
       { type: 'SHORT_TEXT', text: 'Quin valor?', points: 1, required: true, shuffleOptions: false, config: { numericAnswer: true }, answerKey: { accepted: ['2.0'] } },
       { type: 'FILL_BLANKS', text: '___ i ___', points: 1, required: true, shuffleOptions: false, config: { numericBlanks: [true, false] }, answerKey: { blanks: [['1'], ['dos']] } },
-      { type: 'CALCULATED', text: 'Valor {x}', points: 1, required: true, shuffleOptions: false, config: { numericAnswer: false, variables: [{ name: 'x', mode: 'range', min: 1, max: 2, decimals: 0 }] }, answerKey: { formula: '{x}' } },
+      { type: 'CALCULATED', text: 'Valor {x}', points: 1, required: true, shuffleOptions: false, config: { variables: [{ name: 'x', mode: 'range', min: 1, max: 2, decimals: 0 }] }, answerKey: { formula: '{x}' } },
     ],
   };
   const parsed = parsePortableQuiz(exportQuiz(quiz, { 'q_image.png': image }));
   assert.equal(parsed.drafts[0].points_[0].numeric, true);
   assert.equal(parsed.drafts[1].numericAnswer, true);
   assert.deepEqual(parsed.drafts[2].numericBlanks, [true, false]);
-  assert.equal(parsed.drafts[3].numericAnswer, false);
+  assert.equal(parsed.drafts[3].numericAnswer, true);
 });

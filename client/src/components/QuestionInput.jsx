@@ -175,7 +175,7 @@ export default function QuestionInput({ q, value, onChange, attemptId, fileName,
     case 'CALCULATED':
       return (
         <div className="question-input-field">
-          <input type="text" inputMode={c.numericAnswer ? 'decimal' : undefined} aria-invalid={numericErrors.includes('answer') || undefined} maxLength={50} disabled={disabled} value={value ?? ''} onPaste={onPaste('answer')} onBeforeInput={onBeforeInput('answer')} onChange={onTextChange('answer', value, onChange)} />
+          <input type="text" inputMode={c.numericAnswer !== false ? 'decimal' : undefined} aria-invalid={numericErrors.includes('answer') || undefined} maxLength={50} disabled={disabled} value={value ?? ''} onPaste={onPaste('answer')} onBeforeInput={onBeforeInput('answer')} onChange={onTextChange('answer', value, onChange)} />
           {pasteWarning('answer')}
           {numericWarning('answer')}
         </div>

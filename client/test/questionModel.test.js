@@ -37,7 +37,7 @@ test('partial credit is the default and all-or-nothing is preserved for eligible
 
 test('calculated question drafts preserve list generation and legacy ranges', () => {
   const draft = emptyDraft('CALCULATED');
-  assert.equal(draft.numericAnswer, false);
+  assert.equal(draft.numericAnswer, true);
   draft.text = 'Valor {x}';
   draft.vars = [{ name: 'x', mode: 'list', min: 1, max: 10, decimals: 0, values: '1,25\n2.5\n4' }];
   draft.formula = '{x}';
@@ -46,6 +46,7 @@ test('calculated question drafts preserve list generation and legacy ranges', ()
 
   const legacy = fromQuestion({ ...toPayload({ ...draft, vars: [{ name: 'x', min: 1, max: 10, decimals: 0, values: '' }] }), id: 1 });
   assert.equal(legacy.vars[0].mode, 'range');
+  assert.equal(fromQuestion({ ...toPayload(draft), id: 2, config: { variables: draft.vars.map((variable) => ({ ...variable, values: [] })) } }).numericAnswer, true);
 });
 test('fill-in-the-blanks drafts map each blank to its accepted alternatives', () => {
   const draft = { ...emptyDraft('FILL_BLANKS'), text: 'Un batch petit dona ___ actualitzacions i ___.', blanks: ['més | mes', 'soroll'] };
@@ -57,7 +58,7 @@ test('fill-in-the-blanks drafts map each blank to its accepted alternatives', ()
   assert.match(validateDraft({ ...draft, text: 'Sense buits' }), /buits/);
 });
 
-test('numeric answer settings default to text and round-trip independently', () => {
+test('numeric answer settings default to text except formulas and round-trip independently', () => {
   const short = emptyDraft('SHORT_TEXT');
   assert.equal(short.numericAnswer, false);
   short.accepted = '1\n2,5';
@@ -72,4 +73,8 @@ test('numeric answer settings default to text and round-trip independently', () 
   assert.equal(labelPayload.config.points[0].numeric, true);
   assert.deepEqual(fromQuestion({ ...labelPayload, id: 1 }).points_.map(({ numeric }) => numeric), [true]);
   assert.match(validateDraft({ ...labels, points_: [{ ...labels.points_[0], label: 'tres' }] }), /numèrica/);
+
+  const formula = emptyDraft('CALCULATED');
+  assert.equal(formula.numericAnswer, true);
+  assert.equal(toPayload({ ...formula, numericAnswer: false }).config.numericAnswer, false);
 });

@@ -45,7 +45,7 @@ export function emptyDraft(type) {
     case 'FILL_BLANKS':
       return { ...base, blanks: [], numericBlanks: [] };
     case 'CALCULATED':
-      return { ...base, vars: [{ name: 'a', mode: 'range', min: 1, max: 10, decimals: 0, values: '' }], formula: '', tolerance: 0, toleranceType: 'nominal', numericAnswer: false };
+      return { ...base, vars: [{ name: 'a', mode: 'range', min: 1, max: 10, decimals: 0, values: '' }], formula: '', tolerance: 0, toleranceType: 'nominal', numericAnswer: true };
     case 'LONG_TEXT':
       return { ...base, reference: '' };
     case 'DRAWING':
@@ -94,7 +94,7 @@ export function fromQuestion(q) {
     case 'DRAWING':
       return { ...base, color: c.color || '#e11d48', width: c.width || 4 };
     case 'CALCULATED':
-      return { ...base, vars: c.variables.map((v) => ({ ...v, mode: v.mode || 'range', values: (v.values || []).join('\n') })), formula: k.formula || '', tolerance: k.tolerance ?? 0, toleranceType: k.toleranceType || 'nominal', numericAnswer: !!c.numericAnswer };
+      return { ...base, vars: c.variables.map((v) => ({ ...v, mode: v.mode || 'range', values: (v.values || []).join('\n') })), formula: k.formula || '', tolerance: k.tolerance ?? 0, toleranceType: k.toleranceType || 'nominal', numericAnswer: c.numericAnswer !== false };
     default:
       return base;
   }

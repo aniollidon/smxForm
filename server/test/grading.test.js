@@ -67,6 +67,8 @@ test('numeric expected answers compare numerically and validate independent fiel
   assert.deepEqual(getInvalidNumericFields(blanks, ['wrong', 'text']), ['blank0']);
   assert.deepEqual(getInvalidNumericFields({ type: 'IMAGE_LABEL', config: JSON.stringify({ points: [{ id: 'p1', numeric: true }, { id: 'p2', numeric: false }] }) }, { p1: '3,5', p2: 'text' }), []);
   assert.deepEqual(getInvalidNumericFields({ type: 'CALCULATED', config: { numericAnswer: true } }, 'not a number'), ['answer']);
+  assert.deepEqual(getInvalidNumericFields({ type: 'CALCULATED', config: {} }, 'not a number'), ['answer']);
+  assert.deepEqual(getInvalidNumericFields({ type: 'CALCULATED', config: { numericAnswer: false } }, 'text'), []);
 });
 
 test('manual i nota final', () => {
