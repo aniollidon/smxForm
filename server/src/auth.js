@@ -76,6 +76,19 @@ if (devLogin) {
       next(e);
     }
   });
+  router.get('/dev-teacher', async (req, res, next) => {
+    try {
+      const email = `prova.professor@${domain()}`.toLowerCase();
+      const user = await prisma.user.upsert({
+        where: { email },
+        update: { role: 'TEACHER' },
+        create: { email, name: 'Professor prova', role: 'TEACHER' },
+      });
+      req.login(user, (err) => (err ? next(err) : res.redirect(safeNext(req.query.next || '/t'))));
+    } catch (e) {
+      next(e);
+    }
+  });
 }
 
 router.post('/logout', (req, res) => {
