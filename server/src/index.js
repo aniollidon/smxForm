@@ -74,7 +74,19 @@ if (prod && !fs.existsSync(path.join(dist, 'index.html'))) {
 }
 if (fs.existsSync(dist)) {
   app.use(express.static(dist));
-  app.get(/^\/(?!api|auth).*/, (_req, res) => res.sendFile(path.join(dist, 'index.html')));
+  app.get(/^\/(?!api|auth).*/, (req, res, next) => {
+    const nextPath = req.query.next;
+    const quizPath = /^\/q\/[^/]+\/?$/;
+    const isQuizPage = quizPath.test(req.path);
+    const isQuizLogin = req.path === '/login' && typeof nextPath === 'string' && quizPath.test(nextPath);
+    const indexPath = path.join(dist, 'index.html');
+    if (!isQuizPage && !isQuizLogin) return res.sendFile(indexPath);
+
+    fs.readFile(indexPath, 'utf8', (error, html) => {
+      if (error) return next(error);
+      res.type('html').send(html.replace('<title>palamForm</title>', '<title>Accedeix a la tasca</title>'));
+    });
+  });
 }
 
 app.use((err, _req, res, _next) => {
