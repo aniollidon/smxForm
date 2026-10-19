@@ -40,6 +40,7 @@ function Login() {
             Entra amb Google <span aria-hidden="true">↗</span>
           </a>
           {import.meta.env.DEV && <a className="login-note" href="/auth/dev?n=1">Dev: entra com a alumne de prova</a>}
+          {import.meta.env.DEV && <a className="login-note" href="/auth/dev-teacher">Dev: entra com a professor de prova</a>}
           <p className="login-note">Només comptes @inspalamos.cat</p>
         </div>
         <span className="login-version">palamForm / 01</span>
