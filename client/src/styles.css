@@ -343,6 +343,8 @@ tr:last-child td { border-bottom: 0; }
 .question-ai-selection li b { overflow-wrap: anywhere; }
 .question-ai-selection li span { color: #c6a768; }
 .question-ai-selection li p { grid-column: 1 / -1; margin: 0; color: #aaa; white-space: pre-wrap; overflow-wrap: anywhere; }
+.question-bulk-answer-value { grid-column: 1 / -1; color: #aaa; overflow-wrap: anywhere; }
+.question-review-action-message { margin: 0 0 12px; color: #a6ddb8; font-size: 12px; }
 .question-review-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 10px; color: #aaa; font-size: 11px; }
 .question-review-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
 .question-review-mode { display: inline-flex; align-items: center; padding: 3px; border: 1px solid #414141; background: #202020; }

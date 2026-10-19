@@ -57,7 +57,27 @@ function AnswerValue({ answer, question }) {
       ? <DrawingBoard src={fileUrl(question.imageUrl)} color={question.config.color} width={question.config.width} value={answer.value} readOnly />
       : <i>Sense resposta</i>;
   }
-  return <>{Array.isArray(answer.value) ? answer.value.map((v) => v || '—').join(' · ') : String(answer.value)}</>;
+  const value = answer.value;
+  switch (question.type) {
+    case 'MCQ':
+      return <>{(Array.isArray(value) ? value : []).map((id) => question.config.options.find((option) => option.id === id)?.text ?? id).join(', ') || 'Sense resposta'}</>;
+    case 'TRUE_FALSE':
+      return <>{value ? 'Cert' : 'Fals'}</>;
+    case 'MATCHING':
+      return <ul>{Object.entries(value || {}).map(([leftId, rightId]) => (
+        <li key={leftId}>{question.config.left.find((item) => item.id === leftId)?.text ?? leftId} → {question.config.right.find((item) => item.id === rightId)?.text ?? rightId}</li>
+      ))}</ul>;
+    case 'ORDERING':
+      return <ol>{(Array.isArray(value) ? value : []).map((id, index) => (
+        <li key={`${id}-${index}`}>{question.config.items.find((item) => item.id === id)?.text ?? id}</li>
+      ))}</ol>;
+    case 'IMAGE_LABEL':
+      return <ul>{question.config.points.map((point, index) => <li key={point.id}>{index + 1}: {value?.[point.id] || '—'}</li>)}</ul>;
+    case 'FILL_BLANKS':
+      return <ol>{(Array.isArray(value) ? value : []).map((entry, index) => <li key={index}>{entry || '—'}</li>)}</ol>;
+    default:
+      return <>{Array.isArray(value) ? value.map((entry) => entry || '—').join(' · ') : String(value)}</>;
+  }
 }
 
 export default function QuestionReview() {
@@ -68,8 +88,11 @@ export default function QuestionReview() {
   const [pendingOnly, setPendingOnly] = useState(false);
   const [gradingMode, setGradingMode] = useState('llm');
   const [selectedAnswerIds, setSelectedAnswerIds] = useState([]);
+  const [bulkScore, setBulkScore] = useState('');
+  const [bulkFeedback, setBulkFeedback] = useState('');
   const [savingCriteria, setSavingCriteria] = useState(false);
   const [gradingWithAi, setGradingWithAi] = useState(false);
+  const [savingManual, setSavingManual] = useState(false);
   const [actionError, setActionError] = useState('');
   const [actionMessage, setActionMessage] = useState('');
   const { data, isLoading, error } = useQuery({
@@ -98,9 +121,12 @@ export default function QuestionReview() {
   const pending = answers.filter((answer) => answer.needsReview).length;
   const selectableAnswers = answers.filter((answer) => typeof answer.value === 'string' && answer.value.trim());
   const visibleAnswers = pendingOnly ? answers.filter((answer) => answer.needsReview) : answers;
-  const selectedAnswers = selectableAnswers.filter((answer) => selectedAnswerIds.includes(answer.id));
+  const selectedAnswers = answers.filter((answer) => selectedAnswerIds.includes(answer.id));
+  const selectableAnswerIds = new Set(selectableAnswers.map((answer) => answer.id));
+  const selectedLlmAnswers = selectedAnswers.filter((answer) => selectableAnswerIds.has(answer.id));
   const selectionLimitExceeded = selectedAnswers.length > 100;
   const supportsAiGrading = ['SHORT_TEXT', 'LONG_TEXT'].includes(data.question.type);
+  const bulkScoreIsValid = bulkScore !== '' && Number.isFinite(Number(bulkScore)) && Number(bulkScore) >= 0 && Number(bulkScore) <= data.question.points;
   const criteriaChanged = criteria.trim() !== savedCriteria;
   const refresh = () => Promise.all([
     queryClient.invalidateQueries({ queryKey: ['question-answers', qid] }),
@@ -143,7 +169,7 @@ export default function QuestionReview() {
       }
       const result = await api(`/api/teacher/questions/${qid}/ai-grade`, {
         method: 'POST',
-        body: { answerIds: selectedAnswers.map((answer) => answer.id) },
+        body: { answerIds: selectedLlmAnswers.map((answer) => answer.id) },
       });
       setSelectedAnswerIds([]);
       await refresh();
@@ -157,6 +183,29 @@ export default function QuestionReview() {
     }
   };
 
+  const gradeSelectedManually = async () => {
+    setSavingManual(true);
+    setActionError('');
+    setActionMessage('');
+    try {
+      const result = await api(`/api/teacher/questions/${qid}/manual-grade`, {
+        method: 'POST',
+        body: {
+          answerIds: selectedAnswers.map((answer) => answer.id),
+          score: Number(bulkScore),
+          feedback: bulkFeedback,
+        },
+      });
+      setSelectedAnswerIds([]);
+      await refresh();
+      setActionMessage(`Desada la mateixa correcció a ${result.reviewed} respostes.`);
+    } catch (e) {
+      setActionError(e.message);
+    } finally {
+      setSavingManual(false);
+    }
+  };
+
   const expectedAnswer = data.question.type === 'LONG_TEXT'
     ? data.question.answerKey?.reference
     : [
@@ -167,8 +216,15 @@ export default function QuestionReview() {
     setSelectedAnswerIds((current) => current.filter((selectedId) => selectedId !== answerId));
     return refresh();
   };
-  const setPendingSelection = () => setSelectedAnswerIds(selectableAnswers.filter((answer) => answer.needsReview).map((answer) => answer.id));
+  const setPendingSelection = () => {
+    const selectionPool = supportsAiGrading && gradingMode === 'llm' ? selectableAnswers : answers;
+    setSelectedAnswerIds(selectionPool.filter((answer) => answer.needsReview).map((answer) => answer.id));
+  };
   const setLlmSelection = () => setSelectedAnswerIds(selectableAnswers.filter((answer) => answer.llmReviewed).map((answer) => answer.id));
+  const selectAllAnswers = () => {
+    const selectionPool = supportsAiGrading && gradingMode === 'llm' ? selectableAnswers : answers;
+    setSelectedAnswerIds(selectionPool.map((answer) => answer.id));
+  };
   const toggleAnswerSelection = (answerId) => {
     setSelectedAnswerIds((current) => current.includes(answerId)
       ? current.filter((selectedId) => selectedId !== answerId)
@@ -176,7 +232,7 @@ export default function QuestionReview() {
   };
   const toggleCardSelection = (event, answerId) => {
     if (event.target.closest('a, button, input, textarea, select, label')) return;
-    if (gradingWithAi) return;
+    if (gradingWithAi || savingManual) return;
     toggleAnswerSelection(answerId);
   };
   return (
@@ -201,24 +257,25 @@ export default function QuestionReview() {
             <svg aria-hidden="true" viewBox="0 0 20 20"><path d="M3 4h14l-5.4 6.2v4.2l-3.2 1.7v-5.9L3 4Z" /></svg>
             Pendents <span>{pending}</span>
           </button>
-          {supportsAiGrading && <div className="question-review-selection-actions" aria-label="Selecció de respostes">
-            <button onClick={setPendingSelection} disabled={gradingWithAi}>Pendents</button>
-            <button onClick={setLlmSelection} disabled={gradingWithAi}>Avaluades amb LLM</button>
-            <button onClick={() => setSelectedAnswerIds(selectableAnswers.map((answer) => answer.id))} disabled={gradingWithAi}>Totes</button>
-            <button onClick={() => setSelectedAnswerIds([])} disabled={!selectedAnswerIds.length || gradingWithAi}>Cap</button>
-          </div>}
+          <div className="question-review-selection-actions" aria-label="Selecció de respostes">
+            <button onClick={setPendingSelection} disabled={gradingWithAi || savingManual}>Pendents</button>
+            {supportsAiGrading && <button onClick={setLlmSelection} disabled={gradingWithAi || savingManual}>Avaluades amb LLM</button>}
+            <button onClick={selectAllAnswers} disabled={gradingWithAi || savingManual}>Totes</button>
+            <button onClick={() => setSelectedAnswerIds([])} disabled={!selectedAnswerIds.length || gradingWithAi || savingManual}>Cap</button>
+          </div>
         </div>
         <span className="question-review-result-count">{visibleAnswers.length} de {answers.length} respostes</span>
       </div>
+      {actionMessage && <p className="question-review-action-message" role="status">{actionMessage}</p>}
       {supportsAiGrading && gradingMode === 'llm' && (
         <section className="question-ai-grading">
           <label className="question-ai-criteria">Criteris de correcció
             <textarea maxLength={5000} value={criteria} onChange={(event) => setCriteria(event.target.value)} />
           </label>
           <div className="question-ai-selection" aria-live="polite">
-            <strong>Respostes que s’enviaran ({selectedAnswers.length})</strong>
-            {selectedAnswers.length ? (
-              <ul>{selectedAnswers.map((answer) => (
+            <strong>Respostes que s’enviaran ({selectedLlmAnswers.length})</strong>
+            {selectedLlmAnswers.length ? (
+              <ul>{selectedLlmAnswers.map((answer) => (
                 <li key={answer.id}>
                   <b>{answer.attempt.user.name || answer.attempt.user.email}</b>
                   <span>{answer.needsReview ? 'Pendent' : 'Ja corregida; reavaluació sol·licitada'}</span>
@@ -231,13 +288,40 @@ export default function QuestionReview() {
             <button className="secondary" onClick={saveCriteria} disabled={!criteriaChanged || savingCriteria || gradingWithAi}>
               {savingCriteria ? 'Desant criteris…' : 'Desa criteris'}
             </button>
-            <button onClick={evaluateSelectedWithLlm} disabled={!selectedAnswers.length || selectionLimitExceeded || savingCriteria || gradingWithAi}>
-              {gradingWithAi ? 'Avaluant selecció…' : `Avalua ${selectedAnswers.length} seleccionades`}
+            <button onClick={evaluateSelectedWithLlm} disabled={!selectedLlmAnswers.length || selectionLimitExceeded || savingCriteria || gradingWithAi}>
+              {gradingWithAi ? 'Avaluant selecció…' : `Avalua ${selectedLlmAnswers.length} seleccionades`}
             </button>
             <span className="muted">{gradingWithAi ? 'S’està enviant aquesta selecció; no es pot modificar durant la crida.' : selectionLimitExceeded ? 'Màxim de 100 respostes per crida. Redueix la selecció per continuar.' : 'Les propostes no es desen fins que les revisis.'}</span>
           </div>
           {actionError && <p className="error">{actionError}</p>}
-          {actionMessage && <p className="muted">{actionMessage}</p>}
+        </section>
+      )}
+      {(!supportsAiGrading || gradingMode === 'manual') && selectedAnswers.length > 1 && (
+        <section className="question-ai-grading question-bulk-grading">
+          <label className="question-ai-criteria">Puntuació comuna
+            <input type="number" min="0" max={data.question.points} step="0.25" value={bulkScore} onChange={(event) => setBulkScore(event.target.value)} disabled={savingManual} />
+          </label>
+          <label className="question-ai-criteria">Comentari comú
+            <textarea rows="2" maxLength={2000} value={bulkFeedback} onChange={(event) => setBulkFeedback(event.target.value)} disabled={savingManual} />
+          </label>
+          <div className="question-ai-selection" aria-live="polite">
+            <strong>La mateixa correcció s’aplicarà a {selectedAnswers.length} respostes</strong>
+            <ul>{selectedAnswers.map((answer) => (
+              <li key={answer.id}>
+                <b>{answer.attempt.user.name || answer.attempt.user.email}</b>
+                <span>{answer.needsReview ? 'Pendent' : 'Ja corregida; la nota se substituirà'}</span>
+                <div className="question-bulk-answer-value"><AnswerValue answer={answer} question={data.question} /></div>
+              </li>
+            ))}</ul>
+          </div>
+          <div className="question-ai-actions">
+            <button onClick={gradeSelectedManually} disabled={!bulkScoreIsValid || selectionLimitExceeded || savingManual || gradingWithAi}>
+              {savingManual ? 'Desant correccions…' : `Aplica a ${selectedAnswers.length} respostes`}
+            </button>
+            <span className="muted">La puntuació substitueix la nota actual de totes les respostes seleccionades.</span>
+          </div>
+          {selectionLimitExceeded && <p className="error">Màxim de 100 respostes per desament.</p>}
+          {actionError && <p className="error">{actionError}</p>}
         </section>
       )}
       {answers.length === 0 ? (
@@ -259,7 +343,7 @@ export default function QuestionReview() {
                       className="question-answer-select"
                       type="checkbox"
                       checked={selectedAnswerIds.includes(answer.id)}
-                      disabled={gradingWithAi || (supportsAiGrading && !(typeof answer.value === 'string' && answer.value.trim()))}
+                      disabled={gradingWithAi || savingManual || (supportsAiGrading && gradingMode === 'llm' && !selectableAnswerIds.has(answer.id))}
                       aria-label={`Selecciona la resposta de ${answer.attempt.user.name || answer.attempt.user.email}`}
                       title="Selecciona resposta"
                       onChange={() => toggleAnswerSelection(answer.id)}
@@ -276,7 +360,7 @@ export default function QuestionReview() {
                 </div>
               </header>
               <div className="question-answer-content"><AnswerValue answer={answer} question={data.question} /></div>
-              {(!supportsAiGrading || gradingMode === 'manual') && selectedAnswerIds.includes(answer.id) && (
+              {(!supportsAiGrading || gradingMode === 'manual') && selectedAnswers.length === 1 && selectedAnswerIds.includes(answer.id) && (
                 <AnswerReviewForm answer={answer} question={data.question} onDone={() => answerSaved(answer.id)} />
               )}
             </article>

@@ -407,7 +407,6 @@ router.delete('/attempts/:aid', wrap(async (req, res) => {
 
 router.get('/questions/:qid/answers', wrap(async (req, res) => {
   const question = await ownQuestion(req);
-  if (!['SHORT_TEXT', 'FILL_BLANKS', 'LONG_TEXT', 'IMAGE_UPLOAD', 'DRAWING'].includes(question.type)) throw fail(400, 'Aquesta pregunta no té correcció manual');
   const answers = await prisma.answer.findMany({
     where: { questionId: question.id, attempt: { status: { not: 'IN_PROGRESS' } } },
     include: { attempt: { include: { user: { select: { name: true, email: true } } } } },
@@ -494,6 +493,40 @@ router.post('/questions/:qid/ai-grade', wrap(async (req, res) => {
     for (const attemptId of affectedAttemptIds) await recomputeAttempt(attemptId, tx);
   });
   res.json({ evaluations: evaluations.map(({ answerId }) => ({ answerId, llmReviewed: true })) });
+}));
+
+router.post('/questions/:qid/manual-grade', wrap(async (req, res) => {
+  const question = await ownQuestion(req);
+  const body = z.object({
+    answerIds: z.array(z.number().int().positive()).min(1).max(100),
+    score: z.number().min(0).max(question.points),
+    feedback: z.string().max(2000).optional().default(''),
+  }).parse(req.body);
+  if (new Set(body.answerIds).size !== body.answerIds.length) throw fail(400, 'La selecció conté respostes duplicades');
+  const answers = await prisma.answer.findMany({
+    where: {
+      id: { in: body.answerIds },
+      questionId: question.id,
+      attempt: { status: { not: 'IN_PROGRESS' } },
+    },
+  });
+  if (answers.length !== body.answerIds.length) throw fail(400, 'La selecció inclou respostes que no pertanyen a aquesta pregunta o no s’han lliurat');
+  const affectedAttemptIds = [...new Set(answers.map((answer) => answer.attemptId))];
+  await prisma.$transaction(async (tx) => {
+    await tx.answer.updateMany({
+      where: { id: { in: body.answerIds } },
+      data: {
+        score: body.score,
+        feedback: body.feedback,
+        needsReview: false,
+        questionGradingVersion: question.gradingVersion,
+        manuallyReviewed: true,
+        llmReviewed: false,
+      },
+    });
+    for (const attemptId of affectedAttemptIds) await recomputeAttempt(attemptId, tx);
+  });
+  res.json({ reviewed: answers.length });
 }));
 
 router.put('/answers/:id/review', wrap(async (req, res) => {

@@ -65,8 +65,7 @@ export default function AttemptReview() {
   const { data, isLoading } = useQuery({ queryKey: ['attempt-review', id], queryFn: () => api(`/api/teacher/attempts/${id}`) });
   if (isLoading) return <p>Carregant…</p>;
   const answers = [...data.answers].sort((a, b) => a.question.order - b.question.order);
-  const manual = (a) => ['SHORT_TEXT', 'FILL_BLANKS', 'LONG_TEXT', 'IMAGE_UPLOAD', 'DRAWING'].includes(a.question.type);
-  const pendingCount = answers.filter((a) => manual(a) && a.needsReview).length;
+  const pendingCount = answers.filter((a) => a.needsReview).length;
   const status = { NEEDS_REVIEW: 'Pendent de correcció', GRADED: 'Corregit', SUBMITTED: 'Enviat' }[data.status] || data.status;
   const refresh = () => qc.invalidateQueries({ queryKey: ['attempt-review', id] });
   return (
@@ -96,13 +95,11 @@ export default function AttemptReview() {
             <span className={`review-score${a.needsReview ? ' is-pending' : a.score != null && a.score <= 0 ? ' is-negative' : ''}`}>{a.score == null ? 'Pendent' : formatGrade(a.score)} <i>/ {formatGrade(a.question.points)}</i></span>
           </div>
           <div className="review-answer"><Value a={a} /></div>
-          {manual(a) && a.question.answerKey.reference && <p className="review-reference"><span>REFERÈNCIA</span>{a.question.answerKey.reference}</p>}
-          {manual(a) && (
-            <div className="review-grading">
-              <div className="review-grading-heading"><span className="eyebrow">{['SHORT_TEXT', 'FILL_BLANKS'].includes(a.question.type) ? 'REVISIÓ DOCENT OPCIONAL' : "CORRECCIÓ D'AQUEST ALUMNE"}</span><Link to={`/t/quiz/${data.quizId}/question/${a.question.id}/answers`}>Totes les respostes d'aquesta pregunta →</Link></div>
-              <ReviewForm a={a} onDone={refresh} />
-            </div>
-          )}
+          {a.question.answerKey.reference && <p className="review-reference"><span>REFERÈNCIA</span>{a.question.answerKey.reference}</p>}
+          <div className="review-grading">
+            <div className="review-grading-heading"><span className="eyebrow">{a.needsReview ? "CORRECCIÓ D'AQUEST ALUMNE" : 'REVISIÓ DOCENT OPCIONAL'}</span><Link to={`/t/quiz/${data.quizId}/question/${a.question.id}/answers`}>Totes les respostes d'aquesta pregunta →</Link></div>
+            <ReviewForm a={a} onDone={refresh} />
+          </div>
         </article>
       )} />
     </div>
