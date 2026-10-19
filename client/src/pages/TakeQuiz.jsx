@@ -305,6 +305,7 @@ export default function TakeQuiz() {
   if (data.status !== 'IN_PROGRESS') {
     return (
       <div>
+        <title>{data.title}</title>
         <Result result={data.result} title={data.title} />
         <Link to="/s">Tornar</Link>
       </div>
@@ -344,6 +345,7 @@ export default function TakeQuiz() {
   );
   return (
     <div className="take-quiz">
+      <title>{data.title}</title>
       <header className="take-quiz-header">
         <h2>{data.title}</h2>
         <p className={`take-quiz-save-state${saveState.startsWith('Error') ? ' is-error' : ''}`} aria-live="polite">

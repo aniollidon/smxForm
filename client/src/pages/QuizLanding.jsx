@@ -25,6 +25,7 @@ export default function QuizLanding() {
   if (error) return <div className="card"><p className="error">{error.message}</p><Link to="/s">Tornar</Link></div>;
   return (
     <div className="card stack">
+      <title>{data.title}</title>
       <h2>{data.title}</h2>
       <p style={{ whiteSpace: 'pre-wrap' }}>{data.description}</p>
       <p className="muted">Intents: {data.attemptsUsed} / {data.maxAttempts}</p>
