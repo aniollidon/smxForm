@@ -7,7 +7,7 @@ const { computeAttemptScore } = require('../grading');
 const { countBlanks } = require('../grading/blanks');
 const { regradeAttempt, getGradingStatus } = require('../grading/regrade');
 const { evaluateAnswers } = require('../services/llm');
-const { validateDefinition, personalize } = require('../grading/calculated');
+const { validateDefinition, personalize, parseAnswer } = require('../grading/calculated');
 const { requireTeacher } = require('../auth');
 
 const router = express.Router();
@@ -27,12 +27,12 @@ const configSchemas = {
   MATCHING: z.object({ left: z.array(item).min(2).max(12), right: z.array(item).min(2).max(15), ...clipboardConfig }),
   ORDERING: z.object({ items: z.array(item.extend({ text: z.string().trim().min(1).max(500) })).min(2).max(30), ...clipboardConfig }),
   IMAGE_LABEL: z.object({
-    points: z.array(z.object({ id, x: z.number().min(0).max(100), y: z.number().min(0).max(100) })).min(1).max(30),
+    points: z.array(z.object({ id, x: z.number().min(0).max(100), y: z.number().min(0).max(100), numeric: z.boolean().default(false) })).min(1).max(30),
     labels: z.array(z.string().max(100)).nullable().default(null),
     ...clipboardConfig,
   }),
-  SHORT_TEXT: z.object(clipboardConfig).passthrough(),
-  FILL_BLANKS: z.object(clipboardConfig).passthrough(),
+  SHORT_TEXT: z.object({ numericAnswer: z.boolean().default(false), ...clipboardConfig }).passthrough(),
+  FILL_BLANKS: z.object({ numericBlanks: z.array(z.boolean()).default([]), ...clipboardConfig }).passthrough(),
   CALCULATED: z.object({
     variables: z.array(z.object({
       name: z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,19}$/),
@@ -49,6 +49,7 @@ const configSchemas = {
         ctx.addIssue({ code: 'custom', message: 'La llista necessita almenys un valor' });
       }
     }).transform((variable) => ({ ...variable, min: variable.min ?? 0, max: variable.max ?? 0 }))).min(1).max(20),
+    numericAnswer: z.boolean().default(false),
     ...clipboardConfig,
   }),
   LONG_TEXT: z.object(clipboardConfig).passthrough(),
@@ -99,6 +100,10 @@ function parseQuestion(body) {
   }
   if (q.type === 'DRAWING' && !q.imageUrl) throw fail(400, 'Cal una imatge base per dibuixar');
   if (q.type === 'FILL_BLANKS' && countBlanks(q.text) !== q.answerKey.blanks.length) throw fail(400, 'El nombre de buits de l’enunciat no coincideix amb les respostes');
+  if (q.type === 'FILL_BLANKS' && q.config.numericBlanks.length > 0 && q.config.numericBlanks.length !== q.answerKey.blanks.length) throw fail(400, 'La configuració numèrica ha de tenir una entrada per buit');
+  if (q.type === 'SHORT_TEXT' && q.config.numericAnswer && q.answerKey.accepted.some((answer) => !Number.isFinite(parseAnswer(answer)))) throw fail(400, 'Les respostes acceptades han de ser nombres');
+  if (q.type === 'FILL_BLANKS' && q.answerKey.blanks.some((answers, index) => q.config.numericBlanks[index] && answers.some((answer) => !Number.isFinite(parseAnswer(answer))))) throw fail(400, 'Les respostes acceptades dels buits numèrics han de ser nombres');
+  if (q.type === 'IMAGE_LABEL' && q.config.points.some((point) => point.numeric && !Number.isFinite(parseAnswer(q.answerKey.labels[point.id])))) throw fail(400, 'Les etiquetes dels punts numèrics han de ser nombres');
   if (q.type === 'CALCULATED') {
     const error = validateDefinition(q.text, q.config, q.answerKey);
     if (error) throw fail(400, error);

@@ -35,7 +35,7 @@ export default function QuestionEditor({ initial, onSave, onCancel }) {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = Math.round(((e.clientX - rect.left) / rect.width) * 1000) / 10;
     const y = Math.round(((e.clientY - rect.top) / rect.height) * 1000) / 10;
-    set({ points_: [...d.points_, { id: uid(), x, y, label: '' }] });
+    set({ points_: [...d.points_, { id: uid(), x, y, label: '', numeric: false }] });
   };
 
   return (
@@ -133,6 +133,7 @@ export default function QuestionEditor({ initial, onSave, onCancel }) {
                 <div className="row" key={p.id}>
                   <span className="badge">{i + 1}</span>
                   <input type="text" style={{ flex: 1, width: 'auto' }} placeholder="Etiqueta correcta" value={p.label} onChange={(e) => set({ points_: d.points_.map((x) => (x.id === p.id ? { ...x, label: e.target.value } : x)) })} />
+                  <label><input type="checkbox" checked={!!p.numeric} onChange={(e) => set({ points_: d.points_.map((x) => (x.id === p.id ? { ...x, numeric: e.target.checked } : x)) })} /> Número</label>
                   <button className="secondary" onClick={() => set({ points_: d.points_.filter((x) => x.id !== p.id) })}>✕</button>
                 </div>
               ))}
@@ -145,6 +146,7 @@ export default function QuestionEditor({ initial, onSave, onCancel }) {
 
       {d.type === 'SHORT_TEXT' && (
         <div className="stack">
+          <label><input type="checkbox" checked={!!d.numericAnswer} onChange={(e) => set({ numericAnswer: e.target.checked })} /> La resposta ha de ser un número</label>
           <label>Respostes acceptades (una per línia; ignora majúscules i accents)<textarea value={d.accepted} onChange={(e) => set({ accepted: e.target.value })} /></label>
           <label>Expressió regular (opcional)<input type="text" value={d.regex} onChange={(e) => set({ regex: e.target.value })} /></label>
         </div>
@@ -157,6 +159,7 @@ export default function QuestionEditor({ initial, onSave, onCancel }) {
           {Array.from({ length: Math.min(countBlanks(d.text), 20) }, (_, i) => (
             <label key={i}>Buit {i + 1}: respostes acceptades (separades per <code>|</code>; ignora majúscules i accents)
               <input type="text" maxLength={400} value={d.blanks[i] ?? ''} onChange={(e) => set({ blanks: Array.from({ length: Math.max(d.blanks.length, i + 1) }, (_, j) => (j === i ? e.target.value : d.blanks[j] ?? '')) })} />
+              <span><input type="checkbox" checked={!!d.numericBlanks?.[i]} onChange={(e) => set({ numericBlanks: Array.from({ length: Math.max(d.numericBlanks?.length || 0, i + 1) }, (_, j) => j === i ? e.target.checked : !!d.numericBlanks?.[j]) })} /> La resposta d’aquest buit ha de ser un número</span>
             </label>
           ))}
         </div>
@@ -191,6 +194,7 @@ export default function QuestionEditor({ initial, onSave, onCancel }) {
           <label>Fórmula de la resposta correcta (p. ex. {'{a}*{b}/2'}; admet + - * / % ** i funcions com sqrt, pow, abs, round, sin, cos, log, pi)
             <input type="text" maxLength={500} value={d.formula} onChange={(e) => set({ formula: e.target.value })} />
           </label>
+          <label><input type="checkbox" checked={!!d.numericAnswer} onChange={(e) => set({ numericAnswer: e.target.checked })} /> La resposta de l’alumne ha de ser un número</label>
           <div className="row">
             <label>Tolerància <input type="number" min="0" step="any" value={d.tolerance} onChange={(e) => set({ tolerance: e.target.value })} /></label>
             <label>Tipus de tolerància

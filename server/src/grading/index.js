@@ -1,5 +1,5 @@
 const { rng } = require('./rng');
-const { gradeCalculated } = require('./calculated');
+const { gradeCalculated, parseAnswer } = require('./calculated');
 
 const MANUAL_TYPES = ['LONG_TEXT', 'IMAGE_UPLOAD', 'DRAWING'];
 
@@ -37,10 +37,37 @@ function isAnswered(type, value) {
   }
 }
 
+function getInvalidNumericFields(question, value) {
+  const config = typeof question.config === 'string' ? JSON.parse(question.config) : question.config || {};
+  const invalid = [];
+  const isNumeric = (answer) => Number.isFinite(parseAnswer(answer));
+  const hasValue = (answer) => String(answer ?? '').trim() !== '';
+  if (['SHORT_TEXT', 'CALCULATED'].includes(question.type) && config.numericAnswer && hasValue(value) && !isNumeric(value)) {
+    invalid.push('answer');
+  }
+  if (question.type === 'FILL_BLANKS') {
+    (config.numericBlanks || []).forEach((numeric, index) => {
+      if (numeric && hasValue(value?.[index]) && !isNumeric(value[index])) invalid.push(`blank${index}`);
+    });
+  }
+  if (question.type === 'IMAGE_LABEL') {
+    (config.points || []).forEach((point) => {
+      if (point.numeric && hasValue(value?.[point.id]) && !isNumeric(value[point.id])) invalid.push(point.id);
+    });
+  }
+  return invalid;
+}
+
+function matchesNumeric(value, accepted) {
+  const actual = parseAnswer(value);
+  return Number.isFinite(actual) && accepted.some((answer) => parseAnswer(answer) === actual);
+}
+
 // Retorna { answered, fraction } (fraction 0..1) o { manual: true }
 function gradeQuestion(question, value) {
   const { type } = question;
   if (MANUAL_TYPES.includes(type)) return { manual: true, answered: isAnswered(type, value) };
+  const config = typeof question.config === 'string' ? JSON.parse(question.config) : question.config || {};
   const key = question.answerKey || {};
   const answered = isAnswered(type, value);
   if (!answered) return { answered: false, fraction: 0 };
@@ -86,22 +113,30 @@ function gradeQuestion(question, value) {
       const labels = key.labels || {};
       const ids = Object.keys(labels);
       if (!ids.length) break;
-      const ok = ids.filter((p) => norm(value[p]) === norm(labels[p])).length;
+      const numericPoints = new Set((config.points || []).filter((point) => point.numeric).map((point) => point.id));
+      const ok = ids.filter((p) => numericPoints.has(p)
+        ? matchesNumeric(value[p], [labels[p]])
+        : norm(value[p]) === norm(labels[p])).length;
       fraction = ok / ids.length;
       break;
     }
     case 'FILL_BLANKS': {
       const blanks = key.blanks || [];
       if (!blanks.length || !Array.isArray(value)) break;
-      const ok = blanks.filter((accepted, i) => accepted.map(norm).includes(norm(value[i]))).length;
+      const numericBlanks = config.numericBlanks || [];
+      const ok = blanks.filter((accepted, i) => numericBlanks[i]
+        ? matchesNumeric(value[i], accepted)
+        : accepted.map(norm).includes(norm(value[i]))).length;
       fraction = ok / blanks.length;
       break;
     }
     case 'SHORT_TEXT': {
       const v = norm(value);
       const accepted = (key.accepted || []).map(norm);
-      let hit = accepted.includes(v);
-      if (!hit && key.regex) {
+      let hit = config.numericAnswer
+        ? matchesNumeric(value, key.accepted || [])
+        : accepted.includes(v);
+      if (!hit && key.regex && (!config.numericAnswer || Number.isFinite(parseAnswer(value)))) {
         try {
           hit = new RegExp(key.regex, 'i').test(String(value));
         } catch {
@@ -156,4 +191,4 @@ function shuffle(arr, seed) {
   return a;
 }
 
-module.exports = { gradeQuestion, scoreQuestion, computeAttemptScore, shuffle, isAnswered, MANUAL_TYPES, norm };
+module.exports = { gradeQuestion, scoreQuestion, computeAttemptScore, shuffle, isAnswered, getInvalidNumericFields, MANUAL_TYPES, norm };

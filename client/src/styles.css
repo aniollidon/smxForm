@@ -100,6 +100,7 @@ p { line-height: 1.65; }
 .take-quiz-save-state.is-error { color: #ff858d; }
 .take-quiz-question-prompt { -webkit-user-select: none; user-select: none; }
 .question-input-field { min-width: 0; flex: 1 1 auto; }
+.numeric-answer-error { color: #dc2626; font-size: 11px; }
 .paste-blocked-message { display: block; margin-top: 6px; color: #f0c978; font-size: 12px; }
 .take-quiz-finish { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-top: 24px; padding: 20px 22px; border: 1px solid #3b3b3b; border-left: 3px solid var(--blue); border-radius: 3px; background: #242424; }
 .take-quiz-finish-copy h3 { margin: 0 0 5px; font-size: 16px; }

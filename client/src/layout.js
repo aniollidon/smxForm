@@ -25,6 +25,28 @@ export function buildPages(items, groups, get) {
 
 export const blockQuestions = (block) => (block.type === 'group' ? block.entries.map((e) => e.item) : [block.item]);
 
+export function isNumericAnswer(value) {
+  const normalized = String(value ?? '').trim().replace(',', '.');
+  return /^[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$/.test(normalized) && Number.isFinite(Number(normalized));
+}
+
+export function invalidNumericFields(question, answer) {
+  const config = question.config || {};
+  const value = answer?.value;
+  const invalid = [];
+  const check = (field, entry) => {
+    if (String(entry ?? '').trim() && !isNumericAnswer(entry)) invalid.push(field);
+  };
+  if (['SHORT_TEXT', 'CALCULATED'].includes(question.type) && config.numericAnswer) check('answer', value);
+  if (question.type === 'FILL_BLANKS') {
+    (config.numericBlanks || []).forEach((numeric, index) => numeric && check(`blank${index}`, value?.[index]));
+  }
+  if (question.type === 'IMAGE_LABEL') {
+    (config.points || []).forEach((point) => point.numeric && check(point.id, value?.[point.id]));
+  }
+  return invalid;
+}
+
 export function isAnswered(q, answer) {
   if (q.type === 'IMAGE_UPLOAD') return !!answer?.fileUrl;
   const value = answer?.value;

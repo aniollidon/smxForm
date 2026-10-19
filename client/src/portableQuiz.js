@@ -60,19 +60,19 @@ export function exportQuestion(question, image = null) {
       return {
         ...common,
         image: image || null,
-        markers: config.points.map((point) => ({ x: point.x, y: point.y, label: answer.labels?.[point.id] || '' })),
+        markers: config.points.map((point) => ({ x: point.x, y: point.y, label: answer.labels?.[point.id] || '', numeric: !!point.numeric })),
         predefined: !!config.labels,
         extraLabels: (config.labels || []).filter((label) => !correctLabels.has(label)),
       };
     }
     case 'SHORT_TEXT':
-      return { ...common, accepted: answer.accepted || [], ...(answer.regex ? { regex: answer.regex } : {}) };
+      return { ...common, accepted: answer.accepted || [], numericAnswer: !!config.numericAnswer, ...(answer.regex ? { regex: answer.regex } : {}) };
     case 'FILL_BLANKS':
-      return { ...common, blanks: answer.blanks };
+      return { ...common, blanks: answer.blanks, numericBlanks: config.numericBlanks || [] };
     case 'LONG_TEXT':
       return { ...common, reference: answer.reference || '' };
     case 'CALCULATED':
-      return { ...common, variables: config.variables, formula: answer.formula, tolerance: answer.tolerance ?? 0, toleranceType: answer.toleranceType || 'nominal' };
+      return { ...common, variables: config.variables, formula: answer.formula, tolerance: answer.tolerance ?? 0, toleranceType: answer.toleranceType || 'nominal', numericAnswer: !!config.numericAnswer };
     case 'IMAGE_UPLOAD':
       return common;
     case 'DRAWING':
@@ -208,11 +208,11 @@ export function importQuestionToDraft(question) {
     case 'IMAGE_LABEL':
       requireValue(typeof question.image === 'string', 'IMAGE_LABEL: cal incloure «image» amb una imatge data URI.');
       requireValue(Array.isArray(question.markers) && question.markers.length >= 1 && question.markers.length <= 30, 'IMAGE_LABEL: «markers» ha de tenir entre 1 i 30 punts.');
-      requireValue(question.markers.every((point) => Number.isFinite(point.x) && point.x >= 0 && point.x <= 100 && Number.isFinite(point.y) && point.y >= 0 && point.y <= 100 && typeof point.label === 'string'), 'IMAGE_LABEL: cada punt necessita «x» i «y» entre 0 i 100 i una «label» de text.');
+      requireValue(question.markers.every((point) => Number.isFinite(point.x) && point.x >= 0 && point.x <= 100 && Number.isFinite(point.y) && point.y >= 0 && point.y <= 100 && typeof point.label === 'string' && typeof (point.numeric ?? false) === 'boolean'), 'IMAGE_LABEL: cada punt necessita «x» i «y» entre 0 i 100, «label» de text i «numeric» booleà opcional.');
       requireValue(typeof (question.predefined ?? false) === 'boolean' && Array.isArray(question.extraLabels ?? []) && (question.extraLabels ?? []).every((label) => typeof label === 'string'), 'IMAGE_LABEL: «predefined» ha de ser boolean i «extraLabels» una llista de text.');
       draft = {
         ...base,
-        points_: (question.markers || []).map((point) => ({ id: uid(), x: point.x, y: point.y, label: point.label })),
+        points_: (question.markers || []).map((point) => ({ id: uid(), x: point.x, y: point.y, label: point.label, numeric: point.numeric ?? false })),
         predefined: question.predefined ?? false,
         extraLabels: (question.extraLabels || []).join('\n'),
       };
@@ -220,16 +220,18 @@ export function importQuestionToDraft(question) {
     case 'SHORT_TEXT':
       requireValue(Array.isArray(question.accepted ?? []) && (question.accepted ?? []).every((item) => typeof item === 'string'), 'SHORT_TEXT: «accepted» ha de ser una llista de text.');
       requireValue(question.regex == null || (typeof question.regex === 'string' && question.regex.length <= 200), 'SHORT_TEXT: «regex» ha de ser text de fins a 200 caràcters.');
+      requireValue(typeof (question.numericAnswer ?? false) === 'boolean', 'SHORT_TEXT: «numericAnswer» ha de ser booleà.');
       if (question.regex) {
         try { new RegExp(question.regex); } catch { throw new Error('SHORT_TEXT: «regex» no és una expressió regular vàlida.'); }
       }
-      draft = { ...base, accepted: (question.accepted || []).join('\n'), regex: question.regex || '' };
+      draft = { ...base, accepted: (question.accepted || []).join('\n'), regex: question.regex || '', numericAnswer: question.numericAnswer ?? false };
       break;
     case 'FILL_BLANKS':
       requireValue(Array.isArray(question.blanks) && question.blanks.length >= 1 && question.blanks.length <= 20, 'FILL_BLANKS: «blanks» ha de tenir entre 1 i 20 buits.');
       requireValue(question.blanks.every((list) => Array.isArray(list) && list.length >= 1 && list.length <= 20 && list.every((item) => typeof item === 'string' && item.trim() && item.length <= 200 && !item.includes('|'))), 'FILL_BLANKS: cada buit necessita d’1 a 20 respostes de text no buides, sense el caràcter «|».');
+      requireValue(Array.isArray(question.numericBlanks ?? []) && (question.numericBlanks ?? []).length <= question.blanks.length && (question.numericBlanks ?? []).every((numeric) => typeof numeric === 'boolean'), 'FILL_BLANKS: «numericBlanks» ha de ser una llista opcional de booleans, com a màxim una entrada per buit.');
       requireValue(countBlanks(question.text) === question.blanks.length, 'FILL_BLANKS: el nombre de buits (___) de l’enunciat ha de coincidir amb el de «blanks».');
-      draft = { ...base, blanks: question.blanks.map((list) => list.join(' | ')) };
+      draft = { ...base, blanks: question.blanks.map((list) => list.join(' | ')), numericBlanks: question.blanks.map((_, index) => question.numericBlanks?.[index] ?? false) };
       break;
     case 'CALCULATED':
       requireValue(Array.isArray(question.variables) && question.variables.length >= 1 && question.variables.length <= 20, 'CALCULATED: «variables» ha de tenir entre 1 i 20 variables.');
@@ -240,7 +242,8 @@ export function importQuestionToDraft(question) {
       }), 'CALCULATED: cada variable necessita un rang vàlid o una llista d’1 a 100 nombres.');
       requireValue(typeof question.formula === 'string' && question.formula.trim() && question.formula.length <= 500, 'CALCULATED: «formula» ha de ser text de fins a 500 caràcters.');
       requireValue(Number.isFinite(question.tolerance ?? 0) && (question.tolerance ?? 0) >= 0 && ['nominal', 'relative'].includes(question.toleranceType ?? 'nominal'), 'CALCULATED: «tolerance» ha de ser ≥ 0 i «toleranceType» «nominal» o «relative».');
-      draft = { ...base, vars: question.variables.map((v) => ({ name: v.name, mode: v.mode ?? 'range', min: v.min ?? Math.min(...(v.values || [1])), max: v.max ?? Math.max(...(v.values || [10])), decimals: v.decimals ?? 0, values: (v.values || []).join('\n') })), formula: question.formula, tolerance: question.tolerance ?? 0, toleranceType: question.toleranceType ?? 'nominal' };
+      requireValue(typeof (question.numericAnswer ?? false) === 'boolean', 'CALCULATED: «numericAnswer» ha de ser booleà.');
+      draft = { ...base, vars: question.variables.map((v) => ({ name: v.name, mode: v.mode ?? 'range', min: v.min ?? Math.min(...(v.values || [1])), max: v.max ?? Math.max(...(v.values || [10])), decimals: v.decimals ?? 0, values: (v.values || []).join('\n') })), formula: question.formula, tolerance: question.tolerance ?? 0, toleranceType: question.toleranceType ?? 'nominal', numericAnswer: question.numericAnswer ?? false };
       break;
     case 'LONG_TEXT':
       requireValue(question.reference == null || typeof question.reference === 'string', 'LONG_TEXT: «reference» ha de ser text.');

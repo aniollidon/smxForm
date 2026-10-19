@@ -37,6 +37,7 @@ test('partial credit is the default and all-or-nothing is preserved for eligible
 
 test('calculated question drafts preserve list generation and legacy ranges', () => {
   const draft = emptyDraft('CALCULATED');
+  assert.equal(draft.numericAnswer, false);
   draft.text = 'Valor {x}';
   draft.vars = [{ name: 'x', mode: 'list', min: 1, max: 10, decimals: 0, values: '1,25\n2.5\n4' }];
   draft.formula = '{x}';
@@ -54,4 +55,21 @@ test('fill-in-the-blanks drafts map each blank to its accepted alternatives', ()
   assert.deepEqual(fromQuestion({ ...payload, id: 1 }).blanks, ['més | mes', 'soroll']);
   assert.match(validateDraft({ ...draft, blanks: ['més'] }), /buit 2/);
   assert.match(validateDraft({ ...draft, text: 'Sense buits' }), /buits/);
+});
+
+test('numeric answer settings default to text and round-trip independently', () => {
+  const short = emptyDraft('SHORT_TEXT');
+  assert.equal(short.numericAnswer, false);
+  short.accepted = '1\n2,5';
+  short.numericAnswer = true;
+  assert.equal(toPayload(short).config.numericAnswer, true);
+
+  const blanks = { ...emptyDraft('FILL_BLANKS'), text: '___ i ___', blanks: ['1', '2'], numericBlanks: [true, false] };
+  assert.deepEqual(toPayload(blanks).config.numericBlanks, [true, false]);
+
+  const labels = { ...emptyDraft('IMAGE_LABEL'), text: 'Etiqueta', imageUrl: 'image.png', points_: [{ id: 'p1', x: 1, y: 2, label: '3,5', numeric: true }] };
+  const labelPayload = toPayload(labels);
+  assert.equal(labelPayload.config.points[0].numeric, true);
+  assert.deepEqual(fromQuestion({ ...labelPayload, id: 1 }).points_.map(({ numeric }) => numeric), [true]);
+  assert.match(validateDraft({ ...labels, points_: [{ ...labels.points_[0], label: 'tres' }] }), /numèrica/);
 });

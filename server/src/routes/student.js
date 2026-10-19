@@ -3,7 +3,7 @@ const { z } = require('zod');
 const crypto = require('crypto');
 const prisma = require('../db');
 const classroom = require('../services/classroom');
-const { scoreQuestion, computeAttemptScore, shuffle, isAnswered } = require('../grading');
+const { scoreQuestion, computeAttemptScore, shuffle, isAnswered, getInvalidNumericFields } = require('../grading');
 const { requireAuth } = require('../auth');
 const { instantiate, personalize } = require('../grading/calculated');
 
@@ -38,7 +38,7 @@ function studentQuestion(q, seed) {
   const { answerKey, ...rest } = q;
   if (q.type === 'CALCULATED') {
     const { text } = instantiate({ ...q, answerKey: JSON.parse(answerKey) }, seed);
-    return { ...rest, text, config: { allowClipboard: !!config.allowClipboard } };
+    return { ...rest, text, config: { allowClipboard: !!config.allowClipboard, numericAnswer: !!config.numericAnswer } };
   }
   return { ...rest, config };
 }
@@ -199,6 +199,12 @@ router.post('/attempts/:aid/submit', wrap(async (req, res) => {
   if (a.status !== 'IN_PROGRESS') throw fail(409, 'Intent ja enviat');
   await assertAccess(a.quiz, req.user);
   const byQ = new Map(a.answers.map((x) => [x.questionId, x]));
+  const invalidNumeric = a.quiz.questions.flatMap((question) => {
+    const answer = byQ.get(question.id);
+    const fields = getInvalidNumericFields({ ...question, config: JSON.parse(question.config) }, answer ? JSON.parse(answer.value) : null);
+    return fields.length ? [{ questionId: question.id, fields }] : [];
+  });
+  if (invalidNumeric.length) return res.status(422).json({ error: 'Algunes respostes han de ser nombres vàlids', invalidNumeric });
   const missing = a.quiz.questions
     .filter((q) => {
       if (!q.required) return false;

@@ -4,6 +4,7 @@ import { usePrompt } from './PromptProvider.jsx';
 import DrawingBoard from './DrawingBoard.jsx';
 import MarkdownText from './MarkdownText.jsx';
 import { splitBlanks } from '../questionModel.js';
+import { isNumericAnswer } from '../layout.js';
 
 export function ImageWithPoints({ src, points = [], onClick }) {
   return (
@@ -16,7 +17,7 @@ export function ImageWithPoints({ src, points = [], onClick }) {
   );
 }
 
-export default function QuestionInput({ q, value, onChange, attemptId, fileName, onFile, disabled, pasteBlockedField, onPasteBlocked }) {
+export default function QuestionInput({ q, value, onChange, attemptId, fileName, onFile, disabled, pasteBlockedField, onPasteBlocked, numericErrors = [] }) {
   const c = q.config;
   const { alert } = usePrompt();
   const onPaste = (field) => (event) => {
@@ -40,6 +41,9 @@ export default function QuestionInput({ q, value, onChange, attemptId, fileName,
   };
   const pasteWarning = (field) => pasteBlockedField === field && (
     <span className="paste-blocked-message" role="status">Enganxar no està permès en aquesta pregunta.</span>
+  );
+  const numericWarning = (field) => numericErrors.includes(field) && (
+    <span className="numeric-answer-error" role="alert">Introdueix un nombre vàlid.</span>
   );
   switch (q.type) {
     case 'MCQ': {
@@ -121,16 +125,17 @@ export default function QuestionInput({ q, value, onChange, attemptId, fileName,
             <div className="row" key={p.id}>
               <span className="badge">{i + 1}</span>
               {c.labels ? (
-                <select disabled={disabled} value={v[p.id] ?? ''} onChange={(e) => onChange({ ...v, [p.id]: e.target.value })}>
+                <select disabled={disabled} aria-invalid={numericErrors.includes(p.id) || undefined} value={v[p.id] ?? ''} onChange={(e) => onChange({ ...v, [p.id]: e.target.value })}>
                   <option value="">—</option>
-                  {c.labels.map((l) => <option key={l} value={l}>{l}</option>)}
+                  {c.labels.filter((label) => !p.numeric || isNumericAnswer(label)).map((label) => <option key={label} value={label}>{label}</option>)}
                 </select>
               ) : (
                 <div className="question-input-field">
-                  <input type="text" disabled={disabled} value={v[p.id] ?? ''} onPaste={onPaste(p.id)} onBeforeInput={onBeforeInput(p.id)} onChange={onTextChange(p.id, v[p.id], (text) => onChange({ ...v, [p.id]: text }))} />
+                  <input type="text" inputMode={p.numeric ? 'decimal' : undefined} aria-invalid={numericErrors.includes(p.id) || undefined} disabled={disabled} value={v[p.id] ?? ''} onPaste={onPaste(p.id)} onBeforeInput={onBeforeInput(p.id)} onChange={onTextChange(p.id, v[p.id], (text) => onChange({ ...v, [p.id]: text }))} />
                   {pasteWarning(p.id)}
                 </div>
               )}
+                {numericWarning(p.id)}
             </div>
           ))}
         </div>
@@ -139,8 +144,9 @@ export default function QuestionInput({ q, value, onChange, attemptId, fileName,
     case 'SHORT_TEXT':
       return (
         <div className="question-input-field">
-          <input type="text" maxLength={500} disabled={disabled} value={value ?? ''} onPaste={onPaste('answer')} onBeforeInput={onBeforeInput('answer')} onChange={onTextChange('answer', value, onChange)} />
+          <input type="text" inputMode={c.numericAnswer ? 'decimal' : undefined} aria-invalid={numericErrors.includes('answer') || undefined} maxLength={500} disabled={disabled} value={value ?? ''} onPaste={onPaste('answer')} onBeforeInput={onBeforeInput('answer')} onChange={onTextChange('answer', value, onChange)} />
           {pasteWarning('answer')}
+          {numericWarning('answer')}
         </div>
       );
     case 'FILL_BLANKS': {
@@ -154,7 +160,10 @@ export default function QuestionInput({ q, value, onChange, attemptId, fileName,
               <React.Fragment key={i}>
                 <MarkdownText inline>{part}</MarkdownText>
                 {i < parts.length - 1 && (
-                  <input type="text" className="fill-blank" maxLength={200} size={Math.max(10, (values[i] ?? '').length + 2)} aria-label={`Buit ${i + 1}`} disabled={disabled} value={values[i] ?? ''} onPaste={onPaste(`blank${i}`)} onBeforeInput={onBeforeInput(`blank${i}`)} onChange={onTextChange(`blank${i}`, values[i], (text) => setBlank(i, text))} />
+                  <>
+                    <input type="text" inputMode={c.numericBlanks?.[i] ? 'decimal' : undefined} aria-invalid={numericErrors.includes(`blank${i}`) || undefined} className="fill-blank" maxLength={200} size={Math.max(10, (values[i] ?? '').length + 2)} aria-label={`Buit ${i + 1}`} disabled={disabled} value={values[i] ?? ''} onPaste={onPaste(`blank${i}`)} onBeforeInput={onBeforeInput(`blank${i}`)} onChange={onTextChange(`blank${i}`, values[i], (text) => setBlank(i, text))} />
+                    {numericWarning(`blank${i}`)}
+                  </>
                 )}
               </React.Fragment>
             ))}
@@ -166,8 +175,9 @@ export default function QuestionInput({ q, value, onChange, attemptId, fileName,
     case 'CALCULATED':
       return (
         <div className="question-input-field">
-          <input type="text" inputMode="decimal" maxLength={50} disabled={disabled} value={value ?? ''} onPaste={onPaste('answer')} onBeforeInput={onBeforeInput('answer')} onChange={onTextChange('answer', value, onChange)} />
+          <input type="text" inputMode={c.numericAnswer ? 'decimal' : undefined} aria-invalid={numericErrors.includes('answer') || undefined} maxLength={50} disabled={disabled} value={value ?? ''} onPaste={onPaste('answer')} onBeforeInput={onBeforeInput('answer')} onChange={onTextChange('answer', value, onChange)} />
           {pasteWarning('answer')}
+          {numericWarning('answer')}
         </div>
       );
     case 'LONG_TEXT':

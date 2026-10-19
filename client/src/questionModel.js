@@ -20,6 +20,10 @@ export const BLANK_PATTERN = /_{3,}/g;
 export const countBlanks = (text) => (String(text).match(BLANK_PATTERN) || []).length;
 export const splitBlanks = (text) => String(text).split(/_{3,}/);
 const alternatives = (s) => String(s ?? '').split('|').map((x) => x.trim()).filter(Boolean);
+const isNumericText = (value) => {
+  const normalized = String(value ?? '').trim().replace(',', '.');
+  return /^[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$/.test(normalized) && Number.isFinite(Number(normalized));
+};
 
 const lines = (s) => s.split('\n').map((x) => x.trim()).filter(Boolean);
 
@@ -37,11 +41,11 @@ export function emptyDraft(type) {
     case 'IMAGE_LABEL':
       return { ...base, points_: [], predefined: false, extraLabels: '' };
     case 'SHORT_TEXT':
-      return { ...base, accepted: '', regex: '' };
+      return { ...base, accepted: '', regex: '', numericAnswer: false };
     case 'FILL_BLANKS':
-      return { ...base, blanks: [] };
+      return { ...base, blanks: [], numericBlanks: [] };
     case 'CALCULATED':
-      return { ...base, vars: [{ name: 'a', mode: 'range', min: 1, max: 10, decimals: 0, values: '' }], formula: '', tolerance: 0, toleranceType: 'nominal' };
+      return { ...base, vars: [{ name: 'a', mode: 'range', min: 1, max: 10, decimals: 0, values: '' }], formula: '', tolerance: 0, toleranceType: 'nominal', numericAnswer: false };
     case 'LONG_TEXT':
       return { ...base, reference: '' };
     case 'DRAWING':
@@ -76,21 +80,21 @@ export function fromQuestion(q) {
       const usedLabels = new Set(Object.values(k.labels));
       return {
         ...base,
-        points_: c.points.map((p) => ({ ...p, label: k.labels[p.id] ?? '' })),
+        points_: c.points.map((p) => ({ ...p, label: k.labels[p.id] ?? '', numeric: !!p.numeric })),
         predefined: !!c.labels,
         extraLabels: (c.labels || []).filter((l) => !usedLabels.has(l)).join('\n'),
       };
     }
     case 'SHORT_TEXT':
-      return { ...base, accepted: (k.accepted || []).join('\n'), regex: k.regex || '' };
+      return { ...base, accepted: (k.accepted || []).join('\n'), regex: k.regex || '', numericAnswer: !!c.numericAnswer };
     case 'FILL_BLANKS':
-      return { ...base, blanks: (k.blanks || []).map((list) => list.join(' | ')) };
+      return { ...base, blanks: (k.blanks || []).map((list) => list.join(' | ')), numericBlanks: c.numericBlanks || [] };
     case 'LONG_TEXT':
       return { ...base, reference: k.reference || '' };
     case 'DRAWING':
       return { ...base, color: c.color || '#e11d48', width: c.width || 4 };
     case 'CALCULATED':
-      return { ...base, vars: c.variables.map((v) => ({ ...v, mode: v.mode || 'range', values: (v.values || []).join('\n') })), formula: k.formula || '', tolerance: k.tolerance ?? 0, toleranceType: k.toleranceType || 'nominal' };
+      return { ...base, vars: c.variables.map((v) => ({ ...v, mode: v.mode || 'range', values: (v.values || []).join('\n') })), formula: k.formula || '', tolerance: k.tolerance ?? 0, toleranceType: k.toleranceType || 'nominal', numericAnswer: !!c.numericAnswer };
     default:
       return base;
   }
@@ -120,16 +124,18 @@ export function toPayload(d) {
       break;
     case 'IMAGE_LABEL': {
       p.config = {
-        points: d.points_.map(({ id, x, y }) => ({ id, x, y })),
+        points: d.points_.map(({ id, x, y, numeric }) => ({ id, x, y, numeric: !!numeric })),
         labels: d.predefined ? [...new Set([...d.points_.map((x) => x.label.trim()), ...lines(d.extraLabels)].filter(Boolean))] : null,
       };
       p.answerKey = { labels: Object.fromEntries(d.points_.map((x) => [x.id, x.label.trim()])) };
       break;
     }
     case 'SHORT_TEXT':
+      p.config = { numericAnswer: !!d.numericAnswer };
       p.answerKey = { accepted: lines(d.accepted), ...(d.regex ? { regex: d.regex } : {}) };
       break;
     case 'FILL_BLANKS':
+      p.config = { numericBlanks: Array.from({ length: countBlanks(d.text) }, (_, i) => !!d.numericBlanks?.[i]) };
       p.answerKey = { blanks: Array.from({ length: countBlanks(d.text) }, (_, i) => alternatives(d.blanks[i])) };
       break;
     case 'LONG_TEXT':
@@ -142,7 +148,7 @@ export function toPayload(d) {
       p.config = { variables: d.vars.map((v) => ({
         name: v.name.trim(), mode: v.mode || 'range', min: Number(v.min), max: Number(v.max), decimals: Number(v.decimals),
         ...(v.mode === 'list' ? { values: lines(v.values).map((value) => Number(value.replace(',', '.'))) } : {}),
-      })) };
+      })), numericAnswer: !!d.numericAnswer };
       p.answerKey = { formula: d.formula.trim(), tolerance: Number(d.tolerance) || 0, toleranceType: d.toleranceType };
       break;
   }
@@ -168,6 +174,7 @@ export function validateDraft(d) {
       if (!d.imageUrl) return 'Puja una imatge';
       if (!d.points_.length) return 'Clica sobre la imatge per afegir punts';
       if (d.points_.some((x) => !x.label.trim())) return 'Cada punt necessita una etiqueta';
+      if (d.points_.some((x) => x.numeric && !isNumericText(x.label))) return 'Cada etiqueta marcada com a número necessita una resposta numèrica';
       break;
     case 'DRAWING':
       if (!d.imageUrl) return 'Puja una imatge base';
@@ -175,6 +182,7 @@ export function validateDraft(d) {
       break;
     case 'SHORT_TEXT':
       if (!lines(d.accepted).length && !d.regex) return 'Indica almenys una resposta acceptada';
+      if (d.numericAnswer && lines(d.accepted).some((answer) => !isNumericText(answer))) return 'Les respostes acceptades han de ser nombres';
       break;
     case 'FILL_BLANKS': {
       const n = countBlanks(d.text);
@@ -183,6 +191,7 @@ export function validateDraft(d) {
         const list = alternatives(d.blanks[i]);
         if (!list.length) return `Indica la resposta del buit ${i + 1}`;
         if (list.length > 20 || list.some((x) => x.length > 200)) return `El buit ${i + 1} admet fins a 20 respostes de 200 caràcters`;
+        if (d.numericBlanks?.[i] && list.some((answer) => !isNumericText(answer))) return `Les respostes acceptades del buit ${i + 1} han de ser nombres`;
       }
       break;
     }

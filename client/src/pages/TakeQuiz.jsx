@@ -8,7 +8,12 @@ import MarkdownText from '../components/MarkdownText.jsx';
 import { formatGrade } from '../formatGrade.js';
 import { usePrompt } from '../components/PromptProvider.jsx';
 import PagedQuestions, { QuestionFlow } from '../components/QuestionBlocks.jsx';
-import { buildPages, isAnswered } from '../layout.js';
+import { buildPages, invalidNumericFields, isAnswered, isNumericAnswer } from '../layout.js';
+
+const sameNumber = (first, second) => {
+  if (!isNumericAnswer(first) || !isNumericAnswer(second)) return false;
+  return Number(String(first).trim().replace(',', '.')) === Number(String(second).trim().replace(',', '.'));
+};
 
 function AnswerBlock({ label, children, tone }) {
   return (
@@ -130,7 +135,9 @@ function QuestionResult({ q, index, inGroup }) {
             {(q.config?.points || []).map((point, index) => {
               const selected = value?.[point.id];
               const expected = key.labels?.[point.id];
-              const isCorrect = String(selected ?? '').trim().toLocaleLowerCase() === String(expected ?? '').trim().toLocaleLowerCase();
+              const isCorrect = point.numeric
+                ? sameNumber(selected, expected)
+                : String(selected ?? '').trim().toLocaleLowerCase() === String(expected ?? '').trim().toLocaleLowerCase();
               return (
                 <div className={`answer-match${isCorrect ? ' answer-correct' : ' answer-incorrect'}`} key={point.id}>
                   <strong>Punt {index + 1}</strong>
@@ -149,7 +156,9 @@ function QuestionResult({ q, index, inGroup }) {
           {(key.blanks || []).map((accepted, index) => {
             const given = Array.isArray(value) ? value[index] : '';
             const norm = (s) => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
-            const isCorrect = accepted.some((a) => norm(a) === norm(given));
+            const isCorrect = q.config?.numericBlanks?.[index]
+              ? accepted.some((a) => sameNumber(a, given))
+              : accepted.some((a) => norm(a) === norm(given));
             return (
               <div className={`answer-match${isCorrect ? ' answer-correct' : ' answer-incorrect'}`} key={index}>
                 <strong>Buit {index + 1}</strong>
@@ -249,6 +258,7 @@ export default function TakeQuiz() {
   const { data, isLoading, error } = useQuery({ queryKey: ['attempt', id], queryFn: () => api(`/api/student/attempts/${id}`) });
   const [answers, setAnswers] = useState({});
   const [missing, setMissing] = useState([]);
+  const [numericErrors, setNumericErrors] = useState({});
   const [page, setPage] = useState(0);
   const [msg, setMsg] = useState('');
   const [saveState, setSaveState] = useState('');
@@ -277,6 +287,12 @@ export default function TakeQuiz() {
 
   const change = (qid, value) => {
     setAnswers((a) => ({ ...a, [qid]: { ...a[qid], value } }));
+    setNumericErrors((current) => {
+      const next = { ...current };
+      delete next[qid];
+      return next;
+    });
+    setMissing((current) => current.filter((questionId) => questionId !== qid));
     latest.current[qid] = value;
     setPasteBlocked((current) => current?.questionId === qid ? null : current);
     setSaveState('Desant…');
@@ -285,6 +301,17 @@ export default function TakeQuiz() {
   };
 
   const submit = async () => {
+    const invalid = Object.fromEntries(data.questions.map((question) => [question.id, invalidNumericFields(question, answers[question.id])]).filter(([, fields]) => fields.length));
+    if (Object.keys(invalid).length) {
+      const ids = Object.keys(invalid).map(Number);
+      setNumericErrors(invalid);
+      setMissing(ids);
+      setMsg('Revisa els camps marcats: han de contenir un nombre vàlid.');
+      const firstPage = buildPages(data.questions, data.groups).findIndex((p) => p.blocks.some((b) => (b.type === 'group' ? b.entries.map((x) => x.item) : [b.item]).some((q) => ids.includes(q.id))));
+      if (firstPage >= 0) setPage(firstPage);
+      return;
+    }
+    setNumericErrors({});
     if (!await confirm('No podràs canviar les respostes després d’enviar.', { title: 'Vols enviar l’entrega?', confirmLabel: 'Envia l’entrega' })) return;
     setMsg('');
     try {
@@ -292,11 +319,19 @@ export default function TakeQuiz() {
       await api(`/api/student/attempts/${id}/submit`, { method: 'POST' });
       await qc.invalidateQueries();
     } catch (e) {
-      const ids = e.data?.missing || [];
-      setMissing(ids);
+      let ids = e.data?.missing || [];
+      if (e.data?.invalidNumeric) {
+        const invalidFields = Object.fromEntries(e.data.invalidNumeric.map(({ questionId, fields }) => [questionId, fields]));
+        setNumericErrors(invalidFields);
+        ids = e.data.invalidNumeric.map(({ questionId }) => questionId);
+        setMissing(ids);
+        setMsg('Revisa els camps marcats: han de contenir un nombre vàlid.');
+      } else {
+        setMissing(ids);
+        setMsg(e.message);
+      }
       const firstPage = buildPages(data.questions, data.groups).findIndex((p) => p.blocks.some((b) => (b.type === 'group' ? b.entries.map((x) => x.item) : [b.item]).some((q) => ids.includes(q.id))));
       if (firstPage >= 0) setPage(firstPage);
-      setMsg(e.message);
     }
   };
 
@@ -332,6 +367,7 @@ export default function TakeQuiz() {
       <div className="question-response">
         <QuestionInput
           q={q}
+          numericErrors={numericErrors[q.id] || []}
           attemptId={data.id}
           value={answers[q.id]?.value}
           fileName={answers[q.id]?.fileUrl}

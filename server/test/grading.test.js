@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { scoreQuestion, computeAttemptScore, shuffle } = require('../src/grading');
+const { scoreQuestion, computeAttemptScore, shuffle, getInvalidNumericFields } = require('../src/grading');
 
 const q = (type, answerKey, points = 2) => ({ id: 1, type, points, answerKey });
 
@@ -52,6 +52,21 @@ test('FILL_BLANKS puntua cada buit amb alternatives acceptades', () => {
   assert.strictEqual(scoreQuestion(f, ['mes', 'res']).score, 1);
   assert.strictEqual(scoreQuestion(f, ['', '']).answered, false);
   assert.strictEqual(scoreQuestion(f, ['no', 'no'], 0.5).score, -1);
+});
+
+test('numeric expected answers compare numerically and validate independent fields', () => {
+  const short = { ...q('SHORT_TEXT', { accepted: ['1.0'] }), config: { numericAnswer: true } };
+  assert.equal(scoreQuestion(short, '1,00').score, 2);
+  assert.equal(scoreQuestion(short, 'text').score, 0);
+
+  const blanks = {
+    ...q('FILL_BLANKS', { blanks: [['2'], ['two']] }),
+    config: { numericBlanks: [true, false] },
+  };
+  assert.equal(scoreQuestion(blanks, ['2,0', 'TWO']).score, 2);
+  assert.deepEqual(getInvalidNumericFields(blanks, ['wrong', 'text']), ['blank0']);
+  assert.deepEqual(getInvalidNumericFields({ type: 'IMAGE_LABEL', config: JSON.stringify({ points: [{ id: 'p1', numeric: true }, { id: 'p2', numeric: false }] }) }, { p1: '3,5', p2: 'text' }), []);
+  assert.deepEqual(getInvalidNumericFields({ type: 'CALCULATED', config: { numericAnswer: true } }, 'not a number'), ['answer']);
 });
 
 test('manual i nota final', () => {
