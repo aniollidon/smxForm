@@ -51,7 +51,9 @@ function AnswerValue({ answer, question }) {
       ? <img src={fileUrl(answer.fileUrl)} alt={`Resposta de ${answer.attempt.user.name || answer.attempt.user.email}`} />
       : <i>Sense resposta</i>;
   }
-  if (answer.value == null || String(answer.value).trim() === '') return <i>Sense resposta</i>;
+  const tableHasAnswer = question.type === 'TABLE' && Array.isArray(answer.value)
+    && answer.value.some((row) => Array.isArray(row) && row.some((cell) => String(cell ?? '').trim()));
+  if (answer.value == null || (question.type === 'TABLE' ? !tableHasAnswer : String(answer.value).trim() === '')) return <i>Sense resposta</i>;
   if (question.type === 'DRAWING') {
     return answer.value.strokes?.length
       ? <DrawingBoard src={fileUrl(question.imageUrl)} color={question.config.color} width={question.config.width} value={answer.value} readOnly />
@@ -75,6 +77,13 @@ function AnswerValue({ answer, question }) {
       return <ul>{question.config.points.map((point, index) => <li key={point.id}>{index + 1}: {value?.[point.id] || '—'}</li>)}</ul>;
     case 'FILL_BLANKS':
       return <ol>{(Array.isArray(value) ? value : []).map((entry, index) => <li key={index}>{entry || '—'}</li>)}</ol>;
+    case 'TABLE':
+      return (
+        <div className="table-scroll"><table className="table-answer">
+          <thead><tr><th scope="col"></th>{(question.config.columns || []).map((column, index) => <th scope="col" key={index}>{column}</th>)}</tr></thead>
+          <tbody>{(question.config.rows || []).map((row, rowIndex) => <tr key={rowIndex}><th scope="row">{row}</th>{(question.config.columns || []).map((column, columnIndex) => <td key={columnIndex}>{value?.[rowIndex]?.[columnIndex] || '—'}</td>)}</tr>)}</tbody>
+        </table></div>
+      );
     default:
       return <>{Array.isArray(value) ? value.map((entry) => entry || '—').join(' · ') : String(value)}</>;
   }
@@ -110,6 +119,8 @@ function getReferenceAnswer(question) {
     case 'CALCULATED':
       return answerKey.formula ? `Fórmula: ${answerKey.formula}\nEl resultat concret varia segons l’intent.` : '';
     case 'LONG_TEXT':
+      return answerKey.reference || '';
+    case 'TABLE':
       return answerKey.reference || '';
     default:
       return '';
@@ -153,13 +164,15 @@ export default function QuestionReview() {
 
   const answers = [...data.answers].sort((a, b) => new Date(b.attempt.submittedAt) - new Date(a.attempt.submittedAt));
   const pending = answers.filter((answer) => answer.needsReview).length;
-  const selectableAnswers = answers.filter((answer) => typeof answer.value === 'string' && answer.value.trim());
+  const selectableAnswers = answers.filter((answer) => data.question.type === 'TABLE'
+    ? Array.isArray(answer.value) && answer.value.some((row) => Array.isArray(row) && row.some((cell) => String(cell ?? '').trim()))
+    : typeof answer.value === 'string' && answer.value.trim());
   const visibleAnswers = pendingOnly ? answers.filter((answer) => answer.needsReview) : answers;
   const selectedAnswers = answers.filter((answer) => selectedAnswerIds.includes(answer.id));
   const selectableAnswerIds = new Set(selectableAnswers.map((answer) => answer.id));
   const selectedLlmAnswers = selectedAnswers.filter((answer) => selectableAnswerIds.has(answer.id));
   const selectionLimitExceeded = selectedAnswers.length > 100;
-  const supportsAiGrading = ['SHORT_TEXT', 'LONG_TEXT'].includes(data.question.type);
+  const supportsAiGrading = ['SHORT_TEXT', 'LONG_TEXT', 'TABLE'].includes(data.question.type);
   const bulkScoreIsValid = bulkScore !== '' && Number.isFinite(Number(bulkScore)) && Number(bulkScore) >= 0 && Number(bulkScore) <= data.question.points;
   const criteriaChanged = criteria.trim() !== savedCriteria;
   const refresh = () => Promise.all([
@@ -317,7 +330,7 @@ export default function QuestionReview() {
                 <li key={answer.id}>
                   <b>{answer.attempt.user.name || answer.attempt.user.email}</b>
                   <span>{answer.needsReview ? 'Pendent' : 'Ja corregida; reavaluació sol·licitada'}</span>
-                  <p>{String(answer.value)}</p>
+                  <div className="question-ai-answer"><AnswerValue answer={answer} question={data.question} /></div>
                 </li>
               ))}</ul>
             ) : <p>Cap resposta seleccionada.</p>}

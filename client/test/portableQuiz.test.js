@@ -16,6 +16,7 @@ test('round-trips semantic answers for every supported question type', () => {
       { type: 'IMAGE_LABEL', text: 'Etiqueta', points: 2, required: false, shuffleOptions: false, imageUrl: 'q_image.png', config: { points: [{ id: 'p1', x: 12, y: 34 }], labels: ['Cor', 'Pulmó', 'Extra'] }, answerKey: { labels: { p1: 'Cor' } } },
       { type: 'SHORT_TEXT', text: 'Breu', points: 1, required: false, shuffleOptions: false, config: {}, answerKey: { accepted: ['àtom', 'element'], regex: '^e' } },
       { type: 'LONG_TEXT', text: 'Llarga', points: 2, required: false, shuffleOptions: false, config: {}, answerKey: { reference: 'Resposta model' } },
+      { type: 'TABLE', text: 'Completa', points: 2, required: true, shuffleOptions: false, config: { columns: ['Any', 'Població'], rows: ['Barcelona'] }, answerKey: { reference: 'Dades del cens' } },
       { type: 'IMAGE_UPLOAD', text: 'Adjunta', points: 1, required: false, shuffleOptions: false, config: {}, answerKey: {} },
     ],
   };
@@ -37,7 +38,10 @@ test('round-trips semantic answers for every supported question type', () => {
   assert.deepEqual(parsed.drafts[4].points_.map(({ x, y, label }) => ({ x, y, label })), [{ x: 12, y: 34, label: 'Cor' }]);
   assert.deepEqual(parsed.drafts[5].accepted, 'àtom\nelement');
   assert.equal(parsed.drafts[6].reference, 'Resposta model');
-  assert.equal(parsed.drafts[7].type, 'IMAGE_UPLOAD');
+  assert.deepEqual(parsed.drafts[7].tableColumns, ['Any', 'Població']);
+  assert.deepEqual(parsed.drafts[7].tableRows, ['Barcelona']);
+  assert.equal(parsed.drafts[7].reference, 'Dades del cens');
+  assert.equal(parsed.drafts[8].type, 'IMAGE_UPLOAD');
 });
 
 test('rejects unsupported versions and malformed question fields', () => {

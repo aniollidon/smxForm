@@ -78,3 +78,14 @@ test('numeric answer settings default to text except formulas and round-trip ind
   assert.equal(formula.numericAnswer, true);
   assert.equal(toPayload({ ...formula, numericAnswer: false }).config.numericAnswer, false);
 });
+
+test('table question definitions round-trip and require at least one labeled cell', () => {
+  const draft = { ...emptyDraft('TABLE'), text: 'Completa les dades', tableColumns: ['Any', 'Població'], tableRows: ['Barcelona', 'Girona'], reference: 'Consulta la font.' };
+  assert.equal(validateDraft(draft), null);
+  const payload = toPayload(draft);
+  assert.deepEqual(payload.config, { columns: ['Any', 'Població'], rows: ['Barcelona', 'Girona'], allowClipboard: false });
+  assert.deepEqual(payload.answerKey, { reference: 'Consulta la font.' });
+  assert.deepEqual(fromQuestion({ ...payload, id: 1 }).tableColumns, draft.tableColumns);
+  assert.deepEqual(fromQuestion({ ...payload, id: 1 }).tableRows, draft.tableRows);
+  assert.match(validateDraft({ ...draft, tableColumns: [] }), /capçaleres/);
+});

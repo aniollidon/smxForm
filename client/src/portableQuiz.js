@@ -71,6 +71,8 @@ export function exportQuestion(question, image = null) {
       return { ...common, blanks: answer.blanks, numericBlanks: config.numericBlanks || [] };
     case 'LONG_TEXT':
       return { ...common, reference: answer.reference || '' };
+    case 'TABLE':
+      return { ...common, columns: config.columns, rows: config.rows, reference: answer.reference || '' };
     case 'CALCULATED':
       return { ...common, variables: config.variables, formula: answer.formula, tolerance: answer.tolerance ?? 0, toleranceType: answer.toleranceType || 'nominal', numericAnswer: config.numericAnswer !== false };
     case 'IMAGE_UPLOAD':
@@ -248,6 +250,12 @@ export function importQuestionToDraft(question) {
     case 'LONG_TEXT':
       requireValue(question.reference == null || typeof question.reference === 'string', 'LONG_TEXT: «reference» ha de ser text.');
       draft = { ...base, reference: question.reference || '' };
+      break;
+    case 'TABLE':
+      requireValue(Array.isArray(question.columns) && question.columns.length >= 1 && question.columns.length <= 10 && question.columns.every((column) => typeof column === 'string' && column.trim() && column.length <= 200), 'TABLE: «columns» ha de tenir d’1 a 10 capçaleres de text no buides, de fins a 200 caràcters.');
+      requireValue(Array.isArray(question.rows) && question.rows.length >= 1 && question.rows.length <= 20 && question.rows.every((row) => typeof row === 'string' && row.trim() && row.length <= 200), 'TABLE: «rows» ha de tenir d’1 a 20 etiquetes de text no buides, de fins a 200 caràcters.');
+      requireValue(question.reference == null || (typeof question.reference === 'string' && question.reference.length <= 5000), 'TABLE: «reference» ha de ser text de fins a 5000 caràcters.');
+      draft = { ...base, tableColumns: question.columns, tableRows: question.rows, reference: question.reference || '' };
       break;
     case 'IMAGE_UPLOAD':
       draft = base;

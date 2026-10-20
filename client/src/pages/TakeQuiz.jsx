@@ -32,6 +32,12 @@ function PlainAnswer({ q, value }) {
     case 'MATCHING': return value ? <ul>{Object.entries(value).map(([l, r]) => <li key={l}>{text('left', l)} → {text('right', r)}</li>)}</ul> : null;
     case 'ORDERING': return Array.isArray(value) ? <ol>{value.map((id) => <li key={id}>{text('items', id)}</li>)}</ol> : null;
     case 'FILL_BLANKS': return Array.isArray(value) ? <ol>{value.map((v, i) => <li key={i}>{v || '—'}</li>)}</ol> : null;
+    case 'TABLE': return Array.isArray(value) ? (
+      <div className="table-scroll"><table className="table-answer">
+        <thead><tr><th scope="col"></th>{(q.config?.columns || []).map((column, index) => <th scope="col" key={index}>{column}</th>)}</tr></thead>
+        <tbody>{(q.config?.rows || []).map((row, rowIndex) => <tr key={rowIndex}><th scope="row">{row}</th>{(q.config?.columns || []).map((column, columnIndex) => <td key={columnIndex}>{value[rowIndex]?.[columnIndex] || '—'}</td>)}</tr>)}</tbody>
+      </table></div>
+    ) : null;
     case 'IMAGE_LABEL': return (
       <div className="answer-image-labels">
         {q.imageUrl && <ImageWithPoints src={fileUrl(q.imageUrl)} points={q.config?.points || []} />}
@@ -190,6 +196,14 @@ function QuestionResult({ q, index, inGroup }) {
       answers = (
         <div className="answer-columns">
           <AnswerBlock label="La teva resposta">{value}</AnswerBlock>
+          {key.reference && <AnswerBlock label="Resposta de referència" tone="correct">{key.reference}</AnswerBlock>}
+        </div>
+      );
+      break;
+    case 'TABLE':
+      answers = (
+        <div className="answer-columns">
+          <AnswerBlock label="La teva resposta"><PlainAnswer q={q} value={value} /></AnswerBlock>
           {key.reference && <AnswerBlock label="Resposta de referència" tone="correct">{key.reference}</AnswerBlock>}
         </div>
       );

@@ -165,6 +165,33 @@ export default function QuestionEditor({ initial, onSave, onCancel }) {
         </div>
       )}
 
+      {d.type === 'TABLE' && (
+        <div className="stack">
+          <div className="stack">
+            <b>Columnes</b>
+            {d.tableColumns.map((column, index) => (
+              <div className="row" key={index}>
+                <input type="text" maxLength={200} style={{ flex: 1, width: 'auto' }} aria-label={`Capçalera de columna ${index + 1}`} value={column} onChange={(e) => set({ tableColumns: d.tableColumns.map((item, i) => i === index ? e.target.value : item) })} />
+                {d.tableColumns.length > 1 && <button className="secondary" onClick={() => set({ tableColumns: d.tableColumns.filter((_, i) => i !== index) })} aria-label={`Elimina columna ${index + 1}`}>✕</button>}
+              </div>
+            ))}
+            {d.tableColumns.length < 10 && <button className="secondary" onClick={() => set({ tableColumns: [...d.tableColumns, `Columna ${d.tableColumns.length + 1}`] })}>+ Columna</button>}
+          </div>
+          <div className="stack">
+            <b>Files</b>
+            {d.tableRows.map((row, index) => (
+              <div className="row" key={index}>
+                <input type="text" maxLength={200} style={{ flex: 1, width: 'auto' }} aria-label={`Etiqueta de fila ${index + 1}`} value={row} onChange={(e) => set({ tableRows: d.tableRows.map((item, i) => i === index ? e.target.value : item) })} />
+                {d.tableRows.length > 1 && <button className="secondary" onClick={() => set({ tableRows: d.tableRows.filter((_, i) => i !== index) })} aria-label={`Elimina fila ${index + 1}`}>✕</button>}
+              </div>
+            ))}
+            {d.tableRows.length < 20 && <button className="secondary" onClick={() => set({ tableRows: [...d.tableRows, `Fila ${d.tableRows.length + 1}`] })}>+ Fila</button>}
+          </div>
+          <label>Resposta de referència (per a l’avaluació amb LLM)<textarea maxLength={5000} value={d.reference} onChange={(e) => set({ reference: e.target.value })} /></label>
+          <p className="muted">No s’avalua automàticament. Es pot corregir manualment o amb LLM.</p>
+        </div>
+      )}
+
       {d.type === 'CALCULATED' && (
         <div className="stack">
           <p className="muted">Usa variables a l’enunciat amb claus, p. ex. {'{a}'}; cada alumne en rep un valor aleatori del rang o de la llista. També pots escriure càlculs a l’enunciat amb {'{=2*{a}}'}.</p>

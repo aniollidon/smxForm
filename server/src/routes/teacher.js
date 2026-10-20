@@ -16,7 +16,7 @@ router.use(requireTeacher);
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 const fail = (status, msg) => Object.assign(new Error(msg), { status });
 
-const TYPES = ['MCQ', 'TRUE_FALSE', 'MATCHING', 'ORDERING', 'IMAGE_LABEL', 'SHORT_TEXT', 'LONG_TEXT', 'IMAGE_UPLOAD', 'CALCULATED', 'DRAWING', 'FILL_BLANKS'];
+const TYPES = ['MCQ', 'TRUE_FALSE', 'MATCHING', 'ORDERING', 'IMAGE_LABEL', 'SHORT_TEXT', 'LONG_TEXT', 'TABLE', 'IMAGE_UPLOAD', 'CALCULATED', 'DRAWING', 'FILL_BLANKS'];
 const id = z.union([z.string(), z.number()]).transform(String);
 const item = z.object({ id, text: z.string().max(500) });
 const clipboardConfig = { allowClipboard: z.boolean().default(false) };
@@ -53,6 +53,7 @@ const configSchemas = {
     ...clipboardConfig,
   }),
   LONG_TEXT: z.object(clipboardConfig).passthrough(),
+  TABLE: z.object({ columns: z.array(z.string().trim().min(1).max(200)).min(1).max(10), rows: z.array(z.string().trim().min(1).max(200)).min(1).max(20), ...clipboardConfig }),
   IMAGE_UPLOAD: z.object(clipboardConfig).passthrough(),
   DRAWING: z.object({ color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#e11d48'), width: z.number().min(1).max(40).default(4), ...clipboardConfig }),
 };
@@ -70,6 +71,7 @@ const keySchemas = {
     toleranceType: z.enum(['nominal', 'relative']).default('nominal'),
   }),
   LONG_TEXT: z.object({ reference: z.string().optional() }).passthrough(),
+  TABLE: z.object({ reference: z.string().max(5000).optional() }),
   IMAGE_UPLOAD: z.object({}).passthrough(),
   DRAWING: z.object({}).passthrough(),
 };
@@ -426,7 +428,7 @@ router.get('/questions/:qid/answers', wrap(async (req, res) => {
 
 router.put('/questions/:qid/grading-criteria', wrap(async (req, res) => {
   const question = await ownQuestion(req);
-  if (!['SHORT_TEXT', 'LONG_TEXT'].includes(question.type)) throw fail(400, 'L’avaluació assistida només està disponible per a respostes de text');
+  if (!['SHORT_TEXT', 'LONG_TEXT', 'TABLE'].includes(question.type)) throw fail(400, 'L’avaluació assistida només està disponible per a respostes de text i taules');
   const body = z.object({ criteria: z.string().max(5000) }).parse(req.body);
   const updated = await prisma.question.update({
     where: { id: question.id },
@@ -437,7 +439,7 @@ router.put('/questions/:qid/grading-criteria', wrap(async (req, res) => {
 
 router.post('/questions/:qid/ai-grade', wrap(async (req, res) => {
   const question = await ownQuestion(req);
-  if (!['SHORT_TEXT', 'LONG_TEXT'].includes(question.type)) throw fail(400, 'L’avaluació assistida només està disponible per a respostes de text');
+  if (!['SHORT_TEXT', 'LONG_TEXT', 'TABLE'].includes(question.type)) throw fail(400, 'L’avaluació assistida només està disponible per a respostes de text i taules');
   const body = z.object({ answerIds: z.array(z.number().int().positive()).min(1).max(100) }).parse(req.body);
   if (new Set(body.answerIds).size !== body.answerIds.length) throw fail(400, 'La selecció conté respostes duplicades');
   const answers = await prisma.answer.findMany({
@@ -449,15 +451,31 @@ router.post('/questions/:qid/ai-grade', wrap(async (req, res) => {
   });
   if (answers.length !== body.answerIds.length) throw fail(400, 'La selecció inclou respostes que no pertanyen a aquesta pregunta o no s’han lliurat');
   const answerById = new Map(answers.map((answer) => [answer.id, answer]));
+  const questionConfig = JSON.parse(question.config);
   const selected = body.answerIds.map((answerId) => {
     const answer = answerById.get(answerId);
     const value = JSON.parse(answer.value);
+    if (question.type === 'TABLE') {
+      const validTable = Array.isArray(value)
+        && value.length === questionConfig.rows.length
+        && value.every((row) => Array.isArray(row)
+          && row.length === questionConfig.columns.length
+          && row.every((cell) => typeof cell === 'string' && cell.length <= 1000));
+      if (!validTable || !value.some((row) => row.some((cell) => cell.trim()))) throw fail(400, 'No es poden avaluar respostes de taula buides o invàlides');
+      return {
+        answerId: answer.id,
+        value: {
+          columns: questionConfig.columns,
+          rows: questionConfig.rows.map((label, index) => ({ label, cells: value[index] })),
+        },
+      };
+    }
     if (typeof value !== 'string' || !value.trim()) throw fail(400, 'No es poden avaluar respostes buides o no textuals');
     return { answerId: answer.id, value };
   });
 
   const answerKey = JSON.parse(question.answerKey);
-  const expectedAnswer = question.type === 'LONG_TEXT'
+  const expectedAnswer = ['LONG_TEXT', 'TABLE'].includes(question.type)
     ? answerKey.reference || ''
     : { accepted: answerKey.accepted || [], ...(answerKey.regex ? { regex: answerKey.regex } : {}) };
   const evaluations = [];

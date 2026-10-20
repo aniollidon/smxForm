@@ -90,6 +90,12 @@ p { line-height: 1.65; }
 .question-response .ordering-answer-row { min-height: 38px; }
 .question-response .ordering-answer-text { display: flex; flex: 1; min-height: 38px; align-items: center; padding: 0 10px; border: 1px solid #3b3b3b; border-radius: 3px; background: #292929; overflow-wrap: anywhere; }
 .question-response table { table-layout: fixed; }
+.table-scroll { width: 100%; overflow-x: auto; }
+.table-answer { min-width: 520px; table-layout: fixed; }
+.table-answer th:first-child { width: 25%; }
+.table-answer td, .table-answer th { overflow-wrap: anywhere; }
+.question-response .table-answer td { padding: 6px; }
+.question-response .table-answer td input { width: 100%; min-width: 90px; margin: 0; }
 .question-response td { padding: 8px 10px; }
 .question-response td:first-child { width: 35%; padding-left: 0; }
 .question-response td:last-child { padding-right: 0; }

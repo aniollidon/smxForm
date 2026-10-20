@@ -10,6 +10,7 @@ export const TYPE_LABELS = {
   SHORT_TEXT: 'Text breu',
   CALCULATED: 'Fórmula',
   LONG_TEXT: 'Text llarg',
+  TABLE: 'Omplir una taula',
   IMAGE_UPLOAD: 'Pujar imatge',
   DRAWING: 'Dibuixar sobre imatge',
   FILL_BLANKS: 'Omplir buits',
@@ -48,6 +49,8 @@ export function emptyDraft(type) {
       return { ...base, vars: [{ name: 'a', mode: 'range', min: 1, max: 10, decimals: 0, values: '' }], formula: '', tolerance: 0, toleranceType: 'nominal', numericAnswer: true };
     case 'LONG_TEXT':
       return { ...base, reference: '' };
+    case 'TABLE':
+      return { ...base, tableColumns: ['Columna 1', 'Columna 2'], tableRows: ['Fila 1', 'Fila 2'], reference: '' };
     case 'DRAWING':
       return { ...base, color: '#e11d48', width: 4 };
     default:
@@ -91,6 +94,8 @@ export function fromQuestion(q) {
       return { ...base, blanks: (k.blanks || []).map((list) => list.join(' | ')), numericBlanks: c.numericBlanks || [] };
     case 'LONG_TEXT':
       return { ...base, reference: k.reference || '' };
+    case 'TABLE':
+      return { ...base, tableColumns: c.columns || [], tableRows: c.rows || [], reference: k.reference || '' };
     case 'DRAWING':
       return { ...base, color: c.color || '#e11d48', width: c.width || 4 };
     case 'CALCULATED':
@@ -139,6 +144,10 @@ export function toPayload(d) {
       p.answerKey = { blanks: Array.from({ length: countBlanks(d.text) }, (_, i) => alternatives(d.blanks[i])) };
       break;
     case 'LONG_TEXT':
+      p.answerKey = { reference: d.reference };
+      break;
+    case 'TABLE':
+      p.config = { columns: d.tableColumns.map((column) => column.trim()), rows: d.tableRows.map((row) => row.trim()) };
       p.answerKey = { reference: d.reference };
       break;
     case 'DRAWING':
@@ -216,6 +225,10 @@ export function validateDraft(d) {
       if (!(Number(d.tolerance) >= 0)) return 'Tolerància invàlida';
       break;
     }
+    case 'TABLE':
+      if (!d.tableColumns.length || d.tableColumns.length > 10 || d.tableColumns.some((column) => !column.trim() || column.length > 200)) return 'Afegeix d’1 a 10 capçaleres de columna (fins a 200 caràcters)';
+      if (!d.tableRows.length || d.tableRows.length > 20 || d.tableRows.some((row) => !row.trim() || row.length > 200)) return 'Afegeix d’1 a 20 etiquetes de fila (fins a 200 caràcters)';
+      break;
   }
   return null;
 }

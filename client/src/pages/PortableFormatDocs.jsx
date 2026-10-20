@@ -148,6 +148,10 @@ export default function PortableFormatDocs() {
         <p><code>reference</code> és opcional i conté la resposta o els criteris de referència visibles al professorat; aquesta pregunta sempre es corregeix manualment.</p>
         <pre><code>{`"type": "LONG_TEXT", "reference": "Explica el procés i justifica'n les etapes."`}</code></pre>
 
+        <h3><code>TABLE</code> · Omplir una taula</h3>
+        <p><code>columns</code> conté d’1 a 10 capçaleres i <code>rows</code> d’1 a 20 etiquetes de fila, totes amb text de fins a 200 caràcters. L’alumne omple cada cel·la. <code>reference</code> és opcional i serveix de resposta orientativa per a l’avaluació amb LLM; no hi ha correcció automàtica.</p>
+        <pre><code>{`"type": "TABLE", "columns": ["Any", "Població"], "rows": ["Barcelona", "Girona"], "reference": "Valors segons el cens indicat."`}</code></pre>
+
         <h3><code>IMAGE_UPLOAD</code> · Lliurament d’una imatge</h3>
         <p>No té cap camp específic. L’alumne adjunta una imatge i el professorat la corregeix manualment. No confongueu aquest tipus amb <code>image</code>, que és una imatge de context de la pregunta.</p>
         <pre><code>{`"type": "IMAGE_UPLOAD"`}</code></pre>

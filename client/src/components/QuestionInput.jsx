@@ -93,6 +93,28 @@ export default function QuestionInput({ q, value, onChange, attemptId, fileName,
         </table>
       );
     }
+    case 'TABLE': {
+      const values = Array.isArray(value) ? value : [];
+      const setCell = (rowIndex, columnIndex, text) => onChange(Array.from({ length: c.rows.length }, (_, i) => (
+        Array.from({ length: c.columns.length }, (_, j) => i === rowIndex && j === columnIndex ? text : values[i]?.[j] ?? '')
+      )));
+      return (
+        <div className="table-scroll">
+          <table className="table-answer">
+            <thead><tr><th scope="col"></th>{c.columns.map((column, index) => <th scope="col" key={index}>{column}</th>)}</tr></thead>
+            <tbody>{c.rows.map((row, rowIndex) => (
+              <tr key={rowIndex}>
+                <th scope="row">{row}</th>
+                {c.columns.map((column, columnIndex) => (
+                  <td key={columnIndex}><input type="text" maxLength={1000} aria-label={`${row}, ${column}`} disabled={disabled} value={values[rowIndex]?.[columnIndex] ?? ''} onPaste={onPaste(`cell${rowIndex}_${columnIndex}`)} onBeforeInput={onBeforeInput(`cell${rowIndex}_${columnIndex}`)} onChange={onTextChange(`cell${rowIndex}_${columnIndex}`, values[rowIndex]?.[columnIndex], (text) => setCell(rowIndex, columnIndex, text))} /></td>
+                ))}
+              </tr>
+            ))}</tbody>
+          </table>
+          {pasteBlockedField?.startsWith('cell') && pasteWarning(pasteBlockedField)}
+        </div>
+      );
+    }
     case 'ORDERING': {
       const orderedIds = value || c.items.map((item) => item.id);
       const move = (index, direction) => {

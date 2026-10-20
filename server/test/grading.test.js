@@ -74,6 +74,9 @@ test('numeric expected answers compare numerically and validate independent fiel
 test('manual i nota final', () => {
   const l = q('LONG_TEXT', {});
   assert.ok(scoreQuestion(l, 'text').manual);
+  const table = q('TABLE', { reference: 'Dades de referència' });
+  assert.deepEqual(scoreQuestion(table, [['2024', '1.6M'], ['', '']]), { manual: true, answered: true, score: null });
+  assert.deepEqual(scoreQuestion(table, [['', '']]), { manual: true, answered: false, score: null });
   const quiz = { maxScore: 10 };
   const qs = [{ id: 1, points: 1 }, { id: 2, points: 1 }];
   const r = computeAttemptScore(quiz, qs, new Map([[1, { score: 1 }], [2, { score: null, needsReview: true }]]));
