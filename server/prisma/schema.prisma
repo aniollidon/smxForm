@@ -83,6 +83,21 @@ model Question {
   config         String   @default("{}") // JSON visible a l'alumne
   answerKey      String   @default("{}") // JSON només professor
   answers        Answer[]
+  llmRuns        LlmRun[]
+}
+
+// Una crida a la LLM (pot cobrir diverses respostes) amb el prompt i la resposta crua.
+model LlmRun {
+  id         Int      @id @default(autoincrement())
+  questionId Int
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  provider   String
+  model      String
+  webSearch  Boolean  @default(false)
+  prompt     String
+  response   String
+  createdAt  DateTime @default(now())
+  answers    Answer[]
 }
 
 model Attempt {
@@ -114,6 +129,8 @@ model Answer {
   needsReview Boolean  @default(false)
   manuallyReviewed Boolean @default(false)
   llmReviewed Boolean @default(false)
+  llmRunId    Int?
+  llmRun      LlmRun?  @relation(fields: [llmRunId], references: [id], onDelete: SetNull)
   feedback    String?
   questionGradingVersion Int @default(0)
 

@@ -467,7 +467,7 @@ router.get('/questions/:qid/answers', wrap(async (req, res) => {
   const question = await ownQuestion(req);
   const answers = await prisma.answer.findMany({
     where: { questionId: question.id, attempt: { status: { not: 'IN_PROGRESS' } } },
-    include: { attempt: { include: { user: { select: { name: true, email: true } } } } },
+    include: { attempt: { include: { user: { select: { name: true, email: true } } } }, llmRun: { select: { provider: true, model: true, webSearch: true, prompt: true, response: true, createdAt: true } } },
     orderBy: { id: 'desc' },
   });
   const linkedQuestion = question.linkedQuestionId != null ? await prisma.question.findUnique({ where: { id: question.linkedQuestionId } }) : null;
@@ -498,7 +498,7 @@ router.put('/questions/:qid/grading-criteria', wrap(async (req, res) => {
 router.post('/questions/:qid/ai-grade', wrap(async (req, res) => {
   const question = await ownQuestion(req);
   if (!['SHORT_TEXT', 'LONG_TEXT', 'TABLE'].includes(question.type)) throw fail(400, 'L’avaluació assistida només està disponible per a respostes de text i taules');
-  const body = z.object({ answerIds: z.array(z.number().int().positive()).min(1).max(100), model: z.string().max(100).optional() }).parse(req.body);
+  const body = z.object({ answerIds: z.array(z.number().int().positive()).min(1).max(100), model: z.string().max(100).optional(), webSearch: z.boolean().optional().default(false) }).parse(req.body);
   if (new Set(body.answerIds).size !== body.answerIds.length) throw fail(400, 'La selecció conté respostes duplicades');
   const answers = await prisma.answer.findMany({
     where: {
@@ -552,17 +552,32 @@ router.post('/questions/:qid/ai-grade', wrap(async (req, res) => {
   const model = body.model || models[0];
   if (!models.includes(model)) throw fail(400, 'Model no disponible per a aquest proveïdor');
   const llmConfig = { apiKey: provider === 'openai' ? process.env.OPENAI_API_KEY : process.env.GEMINI_API_KEY, model };
+  const webSearch = body.webSearch === true;
+  const traces = [];
   for (let offset = 0; offset < selected.length; offset += 20) {
     const batch = selected.slice(offset, offset + 20);
+    let trace = null;
     evaluations.push(...await evaluateAnswers({
       provider,
       ...llmConfig,
+      webSearch,
       questionText: question.text,
       expectedAnswer,
       maxPoints: question.points,
       criteria: question.gradingCriteria || 'Avalua l’exactitud, la pertinència i la completesa de la resposta respecte de l’enunciat i la resposta esperada. Assigna una puntuació proporcional als punts assolits i justifica-la breument.',
       answers: batch,
+      onTrace: (value) => { trace = value; },
     }));
+    traces.push({ trace, answerIds: batch.map((answer) => answer.answerId) });
+  }
+  // Una fila per crida: el prompt i la resposta crua es desen un sol cop per lot.
+  const runIds = new Map();
+  for (const { trace, answerIds } of traces) {
+    if (!trace) continue;
+    const run = await prisma.llmRun.create({
+      data: { questionId: question.id, provider, model, webSearch, prompt: trace.prompt, response: trace.response },
+    });
+    for (const answerId of answerIds) runIds.set(answerId, run.id);
   }
   const affectedAttemptIds = [...new Set(answers.map((answer) => answer.attemptId))];
   await prisma.$transaction(async (tx) => {
@@ -575,6 +590,7 @@ router.post('/questions/:qid/ai-grade', wrap(async (req, res) => {
           needsReview: false,
           manuallyReviewed: false,
           llmReviewed: true,
+          llmRunId: runIds.get(evaluation.answerId) ?? null,
           questionGradingVersion: question.gradingVersion,
         },
       });

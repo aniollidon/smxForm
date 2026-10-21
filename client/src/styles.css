@@ -199,6 +199,20 @@ code { padding: 2px 5px; border: 1px solid #414141; border-radius: 2px; backgrou
 .modal p { margin: 0 0 20px; color: #d6d3cf; line-height: 1.5; }
 .modal-message { margin-bottom: 20px; color: #d6d3cf; line-height: 1.5; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.llm-run-modal { width: min(920px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow: auto; }
+.llm-run-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.llm-run-header h3 { margin: 2px 0 0; }
+.llm-run-facts { display: flex; flex-wrap: wrap; gap: 8px 24px; margin: 0 0 16px; padding: 10px 12px; border: 1px solid #3d3d3d; background: #212121; }
+.llm-run-facts div { display: grid; gap: 2px; }
+.llm-run-facts dt { color: #969696; font-family: var(--mono); font-size: 9px; text-transform: uppercase; }
+.llm-run-facts dd { margin: 0; color: #e5e5e5; font-size: 12px; }
+.llm-run-feedback { margin-bottom: 12px; }
+.llm-run-feedback p { margin: 4px 0 0; color: #d6d3cf; font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
+.llm-run-details { margin-bottom: 8px; border: 1px solid #3d3d3d; background: #1d1d1d; }
+.llm-run-details summary { padding: 9px 12px; color: #ddd; font-size: 12px; cursor: pointer; }
+.llm-run-details pre { max-height: 340px; margin: 0; padding: 12px; overflow: auto; border-top: 1px solid #3d3d3d; color: #c5c5c5; font-family: var(--mono); font-size: 11px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+.question-answer-llm-detail { padding: 3px 8px; border: 1px solid #4a5f8a; background: transparent; color: #9fb8e6; font-family: var(--mono); font-size: 10px; cursor: pointer; }
+.question-answer-llm-detail:hover { background: #26324a; }
 .format-menu-popover a:hover, .format-menu-popover a:focus-visible { background: #353535; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; clip-path: inset(50%); }
 .format-docs { min-height: 100vh; background: #f1efe8; color: #242520; font-family: Georgia, 'Times New Roman', serif; }

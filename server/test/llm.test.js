@@ -63,3 +63,57 @@ test('falls back to the default model when the list is empty', () => {
   assert.deepEqual(modelList('openai', { OPENAI_MODEL: ' ' }), ['gpt-4.1-mini']);
   assert.deepEqual(modelList('gemini', {}), ['gemini-2.5-flash']);
 });
+
+test('enables Google Search grounding for Gemini when web search is requested', async () => {
+  let request;
+  const raw = JSON.stringify({ evaluations: [{ answerId: 24, score: 3, feedback: 'Bé.' }] });
+  const evaluations = await evaluateAnswers({
+    ...input,
+    provider: 'gemini',
+    apiKey: 'gemini-test-key',
+    webSearch: true,
+    fetchImpl: async (url, options) => {
+      request = { url, options };
+      return { ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: raw }] } }] }) };
+    },
+  });
+
+  const payload = JSON.parse(request.options.body);
+  assert.deepEqual(payload.tools, [{ google_search: {} }]);
+  assert.match(payload.contents[0].parts[0].text, /cerca web/);
+  assert.deepEqual(evaluations, [{ answerId: 24, score: 3, feedback: 'Bé.' }]);
+});
+
+test('uses the Responses API with web search for OpenAI and extracts the output text', async () => {
+  let request;
+  const raw = JSON.stringify({ evaluations: [{ answerId: 24, score: 4, feedback: 'Correcte.' }] });
+  const evaluations = await evaluateAnswers({
+    ...input,
+    webSearch: true,
+    fetchImpl: async (url, options) => {
+      request = { url, options };
+      return { ok: true, json: async () => ({ output: [{ content: [{ type: 'output_text', text: raw }] }] }) };
+    },
+  });
+
+  assert.equal(request.url, 'https://api.openai.com/v1/responses');
+  const payload = JSON.parse(request.options.body);
+  assert.equal(payload.model, 'gpt-test-model');
+  assert.deepEqual(payload.tools, [{ type: 'web_search' }]);
+  assert.deepEqual(payload.text, { format: { type: 'json_object' } });
+  assert.deepEqual(evaluations, [{ answerId: 24, score: 4, feedback: 'Correcte.' }]);
+});
+
+test('reports the prompt and raw response through the trace callback', async () => {
+  const raw = JSON.stringify({ evaluations: [{ answerId: 24, score: 2, feedback: 'Parcial.' }] });
+  let trace;
+  await evaluateAnswers({
+    ...input,
+    onTrace: (value) => { trace = value; },
+    fetchImpl: async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: raw } }] }) }),
+  });
+
+  assert.equal(trace.response, raw);
+  assert.match(trace.prompt, /Explica la fotosíntesi/);
+  assert.doesNotMatch(trace.prompt, /cerca web/);
+});

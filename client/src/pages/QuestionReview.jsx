@@ -5,6 +5,7 @@ import { api, fileUrl } from '../api';
 import { formatGrade } from '../formatGrade.js';
 import DrawingBoard from '../components/DrawingBoard.jsx';
 import MarkdownText from '../components/MarkdownText.jsx';
+import LlmRunModal from '../components/LlmRunModal.jsx';
 
 const defaultCriteria = 'Avalua l’exactitud, la pertinència i la completesa de la resposta respecte de l’enunciat i la resposta esperada. Assigna una puntuació proporcional als punts assolits i justifica-la breument.';
 
@@ -152,6 +153,8 @@ export default function QuestionReview() {
     staleTime: Infinity,
   });
   const [model, setModel] = useState('');
+  const [webSearch, setWebSearch] = useState(false);
+  const [llmDetail, setLlmDetail] = useState(null);
   const models = llm?.models || [];
   const selectedModel = models.includes(model) ? model : models[0] || '';
 
@@ -224,7 +227,7 @@ export default function QuestionReview() {
       }
       const result = await api(`/api/teacher/questions/${qid}/ai-grade`, {
         method: 'POST',
-        body: { answerIds: selectedLlmAnswers.map((answer) => answer.id), ...(selectedModel ? { model: selectedModel } : {}) },
+        body: { answerIds: selectedLlmAnswers.map((answer) => answer.id), ...(selectedModel ? { model: selectedModel } : {}), webSearch },
       });
       setSelectedAnswerIds([]);
       await refresh();
@@ -338,6 +341,10 @@ export default function QuestionReview() {
               </select>
             </label>
           )}
+          <label className="question-ai-model">
+            <input type="checkbox" checked={webSearch} disabled={gradingWithAi} onChange={(event) => setWebSearch(event.target.checked)} />
+            Permetre cerca web al model
+          </label>
           <div className="question-ai-selection" aria-live="polite">
             <strong>Respostes que s’enviaran ({selectedLlmAnswers.length})</strong>
             {selectedLlmAnswers.length ? (
@@ -425,6 +432,16 @@ export default function QuestionReview() {
                   <span className={`question-answer-score${answer.score == null ? ' is-pending' : ''}`}>
                     {answer.score == null ? 'Sense nota' : `${formatGrade(answer.score)} / ${formatGrade(data.question.points)}`}
                   </span>
+                  {answer.llmRun && (
+                    <button
+                      type="button"
+                      className="question-answer-llm-detail"
+                      title="Veure la correcció del model"
+                      onClick={(event) => { event.stopPropagation(); setLlmDetail(answer); }}
+                    >
+                      Detall LLM
+                    </button>
+                  )}
                   <Link to={`/t/attempt/${answer.attemptId}`}>Obre l'intent ↗</Link>
                 </div>
               </header>
@@ -443,6 +460,7 @@ export default function QuestionReview() {
           ))}
         </div>
       )}
+      {llmDetail && <LlmRunModal answer={llmDetail} question={data.question} onClose={() => setLlmDetail(null)} />}
     </div>
   );
 }
