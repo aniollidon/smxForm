@@ -100,7 +100,7 @@ test('uses the Responses API with web search for OpenAI and extracts the output 
   const payload = JSON.parse(request.options.body);
   assert.equal(payload.model, 'gpt-test-model');
   assert.deepEqual(payload.tools, [{ type: 'web_search' }]);
-  assert.deepEqual(payload.text, { format: { type: 'json_object' } });
+  assert.equal(payload.text.format.type, 'json_schema');
   assert.deepEqual(evaluations, [{ answerId: 24, score: 4, feedback: 'Correcte.' }]);
 });
 
@@ -116,4 +116,12 @@ test('reports the prompt and raw response through the trace callback', async () 
   assert.equal(trace.response, raw);
   assert.match(trace.prompt, /Explica la fotosíntesi/);
   assert.doesNotMatch(trace.prompt, /cerca web/);
+});
+
+test('includes the provider error message when the request fails', async () => {
+  await assert.rejects(evaluateAnswers({
+    ...input,
+    webSearch: true,
+    fetchImpl: async () => ({ ok: false, json: async () => ({ error: { message: 'Web Search cannot be used with JSON mode.' } }) }),
+  }), /Web Search cannot be used with JSON mode/);
 });

@@ -1,5 +1,43 @@
 const fail = (status, message) => Object.assign(new Error(message), { status });
 
+// L'API només permet json_schema (no json_object) quan s'activa la cerca web.
+const EVALUATION_SCHEMA = {
+  type: 'json_schema',
+  name: 'evaluations',
+  strict: true,
+  schema: {
+    type: 'object',
+    properties: {
+      evaluations: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            answerId: { type: 'number' },
+            score: { type: 'number' },
+            feedback: { type: 'string' },
+          },
+          required: ['answerId', 'score', 'feedback'],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ['evaluations'],
+    additionalProperties: false,
+  },
+};
+
+async function providerError(response, provider) {
+  let detail = '';
+  try {
+    const body = await response.json();
+    detail = body?.error?.message || '';
+  } catch {
+    // Sense cos llegible, queda el missatge genèric.
+  }
+  return fail(502, `${provider} no ha pogut avaluar les respostes${detail ? `: ${detail.slice(0, 300)}` : ''}`);
+}
+
 const DEFAULT_MODELS = { openai: 'gpt-4.1-mini', gemini: 'gemini-2.5-flash' };
 
 // Proveïdor actiu segons LLM_PROVIDER (o la clau disponible).
@@ -50,7 +88,7 @@ async function requestGemini({ apiKey, model, prompt, webSearch, fetchImpl }) {
       ...(webSearch ? { tools: [{ google_search: {} }] } : {}),
     }),
   });
-  if (!response.ok) throw fail(502, 'Gemini no ha pogut avaluar les respostes');
+  if (!response.ok) throw await providerError(response, 'Gemini');
   const data = await response.json();
   return data.candidates?.[0]?.content?.parts?.map((part) => part.text || '').join('');
 }
@@ -72,7 +110,7 @@ async function requestOpenAI({ apiKey, model, prompt, webSearch, fetchImpl }) {
           { role: 'user', content: prompt },
         ],
         tools: [{ type: 'web_search' }],
-        text: { format: { type: 'json_object' } },
+        text: { format: EVALUATION_SCHEMA },
       }),
     })
     : await fetchImpl('https://api.openai.com/v1/chat/completions', {
@@ -87,7 +125,7 @@ async function requestOpenAI({ apiKey, model, prompt, webSearch, fetchImpl }) {
         response_format: { type: 'json_object' },
       }),
     });
-  if (!response.ok) throw fail(502, 'OpenAI no ha pogut avaluar les respostes');
+  if (!response.ok) throw await providerError(response, 'OpenAI');
   const data = await response.json();
   if (!webSearch) return data.choices?.[0]?.message?.content;
   if (typeof data.output_text === 'string') return data.output_text;
