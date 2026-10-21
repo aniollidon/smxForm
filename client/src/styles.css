@@ -342,6 +342,7 @@ tr:last-child td { border-bottom: 0; }
 .question-ai-grading { display: grid; gap: 12px; margin: 0 0 18px; padding: 14px 16px; border: 1px solid #414141; background: #242424; }
 .question-ai-criteria { display: grid; gap: 6px; color: #ddd; font-size: 12px; }
 .question-ai-criteria textarea { min-height: 88px; resize: vertical; }
+.question-ai-model { display: flex; align-items: center; gap: 8px; color: #ddd; font-size: 12px; }
 .question-ai-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
 .question-ai-actions .muted { flex: 1 1 260px; font-size: 11px; }
 .question-ai-grading > p { margin: 0; font-size: 12px; }

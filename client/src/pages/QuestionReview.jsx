@@ -146,6 +146,14 @@ export default function QuestionReview() {
     queryKey: ['question-answers', qid],
     queryFn: () => api(`/api/teacher/questions/${qid}/answers`),
   });
+  const { data: llm } = useQuery({
+    queryKey: ['llm-models'],
+    queryFn: () => api('/api/teacher/llm-models'),
+    staleTime: Infinity,
+  });
+  const [model, setModel] = useState('');
+  const models = llm?.models || [];
+  const selectedModel = models.includes(model) ? model : models[0] || '';
 
   useEffect(() => {
     if (!data?.question) return;
@@ -216,7 +224,7 @@ export default function QuestionReview() {
       }
       const result = await api(`/api/teacher/questions/${qid}/ai-grade`, {
         method: 'POST',
-        body: { answerIds: selectedLlmAnswers.map((answer) => answer.id) },
+        body: { answerIds: selectedLlmAnswers.map((answer) => answer.id), ...(selectedModel ? { model: selectedModel } : {}) },
       });
       setSelectedAnswerIds([]);
       await refresh();
@@ -323,6 +331,13 @@ export default function QuestionReview() {
           <label className="question-ai-criteria">Criteris de correcció
             <textarea maxLength={5000} value={criteria} onChange={(event) => setCriteria(event.target.value)} />
           </label>
+          {models.length > 1 && (
+            <label className="question-ai-model">Model
+              <select value={selectedModel} onChange={(event) => setModel(event.target.value)} disabled={gradingWithAi}>
+                {models.map((name) => <option key={name} value={name}>{name}{name === models[0] ? ' (per defecte)' : ''}</option>)}
+              </select>
+            </label>
+          )}
           <div className="question-ai-selection" aria-live="polite">
             <strong>Respostes que s’enviaran ({selectedLlmAnswers.length})</strong>
             {selectedLlmAnswers.length ? (

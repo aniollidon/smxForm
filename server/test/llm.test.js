@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { evaluateAnswers } = require('../src/services/llm');
+const { evaluateAnswers, llmOptions, modelList } = require('../src/services/llm');
 
 const input = {
   provider: 'openai',
@@ -50,4 +50,16 @@ test('requires an OpenAI API key and rejects out-of-range scores', async () => {
 
 test('rejects an unsupported provider', async () => {
   await assert.rejects(evaluateAnswers({ ...input, provider: 'other' }), /LLM_PROVIDER/);
+});
+
+test('reads the model list from the active provider .env value', () => {
+  const env = { LLM_PROVIDER: 'openai', OPENAI_MODEL: 'gpt-a, gpt-b ,, gpt-a', GEMINI_MODEL: 'gem-a' };
+  assert.deepEqual(modelList('openai', env), ['gpt-a', 'gpt-b']);
+  assert.deepEqual(modelList('gemini', env), ['gem-a']);
+  assert.deepEqual(llmOptions(env), { provider: 'openai', models: ['gpt-a', 'gpt-b'] });
+});
+
+test('falls back to the default model when the list is empty', () => {
+  assert.deepEqual(modelList('openai', { OPENAI_MODEL: ' ' }), ['gpt-4.1-mini']);
+  assert.deepEqual(modelList('gemini', {}), ['gemini-2.5-flash']);
 });

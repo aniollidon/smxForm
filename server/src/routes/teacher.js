@@ -6,7 +6,7 @@ const classroom = require('../services/classroom');
 const { computeAttemptScore } = require('../grading');
 const { countBlanks } = require('../grading/blanks');
 const { regradeAttempt, getGradingStatus } = require('../grading/regrade');
-const { evaluateAnswers } = require('../services/llm');
+const { evaluateAnswers, llmOptions } = require('../services/llm');
 const { validateDefinition, personalize, parseAnswer } = require('../grading/calculated');
 const { requireTeacher } = require('../auth');
 const { describeAnswer } = require('../services/linkedAnswer');
@@ -181,6 +181,10 @@ async function gradingStatusFor(quiz) {
 
 router.get('/me', (req, res) => {
   res.json({ classroomConnected: !!req.user.googleTokens });
+});
+
+router.get('/llm-models', (req, res) => {
+  res.json(llmOptions());
 });
 
 router.get('/quizzes', wrap(async (req, res) => {
@@ -494,7 +498,7 @@ router.put('/questions/:qid/grading-criteria', wrap(async (req, res) => {
 router.post('/questions/:qid/ai-grade', wrap(async (req, res) => {
   const question = await ownQuestion(req);
   if (!['SHORT_TEXT', 'LONG_TEXT', 'TABLE'].includes(question.type)) throw fail(400, 'L’avaluació assistida només està disponible per a respostes de text i taules');
-  const body = z.object({ answerIds: z.array(z.number().int().positive()).min(1).max(100) }).parse(req.body);
+  const body = z.object({ answerIds: z.array(z.number().int().positive()).min(1).max(100), model: z.string().max(100).optional() }).parse(req.body);
   if (new Set(body.answerIds).size !== body.answerIds.length) throw fail(400, 'La selecció conté respostes duplicades');
   const answers = await prisma.answer.findMany({
     where: {
@@ -544,13 +548,10 @@ router.post('/questions/:qid/ai-grade', wrap(async (req, res) => {
     ? answerKey.reference || ''
     : { accepted: answerKey.accepted || [], ...(answerKey.regex ? { regex: answerKey.regex } : {}) };
   const evaluations = [];
-  const provider = (process.env.LLM_PROVIDER || (process.env.OPENAI_API_KEY ? 'openai' : 'gemini')).toLowerCase();
-  const llmConfig = provider === 'openai'
-    ? { apiKey: process.env.OPENAI_API_KEY, model: process.env.OPENAI_MODEL || 'gpt-4.1-mini' }
-    : provider === 'gemini'
-      ? { apiKey: process.env.GEMINI_API_KEY, model: process.env.GEMINI_MODEL || 'gemini-2.5-flash' }
-      : null;
-  if (!llmConfig) throw fail(500, 'LLM_PROVIDER ha de ser "gemini" o "openai"');
+  const { provider, models } = llmOptions();
+  const model = body.model || models[0];
+  if (!models.includes(model)) throw fail(400, 'Model no disponible per a aquest proveïdor');
+  const llmConfig = { apiKey: provider === 'openai' ? process.env.OPENAI_API_KEY : process.env.GEMINI_API_KEY, model };
   for (let offset = 0; offset < selected.length; offset += 20) {
     const batch = selected.slice(offset, offset + 20);
     evaluations.push(...await evaluateAnswers({
