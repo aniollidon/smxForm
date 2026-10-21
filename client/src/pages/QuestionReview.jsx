@@ -334,17 +334,19 @@ export default function QuestionReview() {
           <label className="question-ai-criteria">Criteris de correcció
             <textarea maxLength={5000} value={criteria} onChange={(event) => setCriteria(event.target.value)} />
           </label>
-          {models.length > 1 && (
-            <label className="question-ai-model">Model
-              <select value={selectedModel} onChange={(event) => setModel(event.target.value)} disabled={gradingWithAi}>
-                {models.map((name) => <option key={name} value={name}>{name}{name === models[0] ? ' (per defecte)' : ''}</option>)}
-              </select>
+          <div className="question-ai-options">
+            {models.length > 1 && (
+              <label className="question-ai-model">Model
+                <select value={selectedModel} onChange={(event) => setModel(event.target.value)} disabled={gradingWithAi}>
+                  {models.map((name) => <option key={name} value={name}>{name}{name === models[0] ? ' (per defecte)' : ''}</option>)}
+                </select>
+              </label>
+            )}
+            <label className="question-ai-model">
+              <input type="checkbox" checked={webSearch} disabled={gradingWithAi} onChange={(event) => setWebSearch(event.target.checked)} />
+              Permetre cerca web al model
             </label>
-          )}
-          <label className="question-ai-model">
-            <input type="checkbox" checked={webSearch} disabled={gradingWithAi} onChange={(event) => setWebSearch(event.target.checked)} />
-            Permetre cerca web al model
-          </label>
+          </div>
           <div className="question-ai-selection" aria-live="polite">
             <strong>Respostes que s’enviaran ({selectedLlmAnswers.length})</strong>
             {selectedLlmAnswers.length ? (
