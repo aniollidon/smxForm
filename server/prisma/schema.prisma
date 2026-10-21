@@ -77,6 +77,9 @@ model Question {
   order          Int      @default(0)
   gradingVersion Int     @default(0)
   gradingCriteria String?
+  linkedQuestionId Int? // pregunta anterior de què depèn la resposta; invisible per a l'alumne
+  linkedQuestion Question?  @relation("QuestionLink", fields: [linkedQuestionId], references: [id], onDelete: SetNull)
+  linkedFrom     Question[] @relation("QuestionLink")
   config         String   @default("{}") // JSON visible a l'alumne
   answerKey      String   @default("{}") // JSON només professor
   answers        Answer[]

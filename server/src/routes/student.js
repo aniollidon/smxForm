@@ -35,7 +35,7 @@ function studentQuestion(q, seed) {
     if (config.items) config.items = shuffle(config.items, s);
     if (config.labels) config.labels = shuffle(config.labels, s);
   }
-  const { answerKey, ...rest } = q;
+  const { answerKey, linkedQuestionId, ...rest } = q;
   if (q.type === 'CALCULATED') {
     const { text } = instantiate({ ...q, answerKey: JSON.parse(answerKey) }, seed);
     return { ...rest, text, config: { allowClipboard: !!config.allowClipboard, numericAnswer: config.numericAnswer !== false } };

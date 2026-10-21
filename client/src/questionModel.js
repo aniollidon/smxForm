@@ -29,7 +29,7 @@ const isNumericText = (value) => {
 const lines = (s) => s.split('\n').map((x) => x.trim()).filter(Boolean);
 
 export function emptyDraft(type) {
-  const base = { type, text: '', imageUrl: null, points: 1, required: true, shuffleOptions: ['MCQ', 'MATCHING', 'ORDERING', 'IMAGE_LABEL'].includes(type), allowClipboard: false };
+  const base = { type, text: '', imageUrl: null, points: 1, required: true, shuffleOptions: ['MCQ', 'MATCHING', 'ORDERING', 'IMAGE_LABEL'].includes(type), allowClipboard: false, linkedQuestionId: null };
   switch (type) {
     case 'MCQ':
       return { ...base, multiple: false, allOrNothing: false, opts: [{ id: uid(), text: '', correct: true }, { id: uid(), text: '', correct: false }] };
@@ -60,7 +60,7 @@ export function emptyDraft(type) {
 
 export function fromQuestion(q) {
   const { type, config: c, answerKey: k } = q;
-  const base = { id: q.id, type, text: q.text, imageUrl: q.imageUrl, points: q.points, required: q.required, shuffleOptions: q.shuffleOptions, allowClipboard: !!c.allowClipboard };
+  const base = { id: q.id, type, text: q.text, imageUrl: q.imageUrl, points: q.points, required: q.required, shuffleOptions: q.shuffleOptions, allowClipboard: !!c.allowClipboard, linkedQuestionId: q.linkedQuestionId ?? null };
   switch (type) {
     case 'MCQ':
       return { ...base, multiple: c.multiple, allOrNothing: !!k.allOrNothing, opts: c.options.map((o) => ({ ...o, correct: k.correct.includes(o.id) })) };
@@ -106,7 +106,7 @@ export function fromQuestion(q) {
 }
 
 export function toPayload(d) {
-  const p = { type: d.type, text: d.text, imageUrl: d.imageUrl || null, points: Number(d.points), required: d.required, shuffleOptions: d.shuffleOptions, config: {}, answerKey: {} };
+  const p = { type: d.type, text: d.text, imageUrl: d.imageUrl || null, points: Number(d.points), required: d.required, shuffleOptions: d.shuffleOptions, linkedQuestionId: d.linkedQuestionId ?? null, config: {}, answerKey: {} };
   switch (d.type) {
     case 'MCQ':
       p.config = { options: d.opts.map(({ id, text }) => ({ id, text })), multiple: d.multiple };

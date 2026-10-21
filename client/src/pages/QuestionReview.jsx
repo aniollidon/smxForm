@@ -413,6 +413,13 @@ export default function QuestionReview() {
                   <Link to={`/t/attempt/${answer.attemptId}`}>Obre l'intent ↗</Link>
                 </div>
               </header>
+              {answer.linkedAnswer && (
+                <div className="review-linked-answer">
+                  <span className="eyebrow">RESPOSTA ANTERIOR ENLLAÇADA</span>
+                  <div className="review-linked-question"><MarkdownText>{answer.linkedAnswer.question.text}</MarkdownText></div>
+                  <AnswerValue answer={{ ...answer, value: answer.linkedAnswer.value, fileUrl: answer.linkedAnswer.fileUrl }} question={answer.linkedAnswer.question} />
+                </div>
+              )}
               <div className="question-answer-content"><AnswerValue answer={answer} question={data.question} /></div>
               {gradingMode === 'manual' && selectedAnswerIds.includes(answer.id) && (
                 <AnswerReviewForm answer={answer} question={data.question} onDone={() => answerSaved(answer.id)} />

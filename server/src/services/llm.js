@@ -9,6 +9,9 @@ function buildPrompt({ questionText, expectedAnswer, maxPoints, criteria, answer
     `Puntuació màxima: ${maxPoints}`,
     `Criteris de correcció: ${criteria}`,
     `Respostes avaluades: ${JSON.stringify(answers)}`,
+    ...(answers.some((answer) => 'previousAnswer' in answer)
+      ? ['Si una resposta inclou "previousQuestion" i "previousAnswer", la resposta correcta depèn del que l’alumne va contestar en aquesta pregunta anterior: avalua la coherència amb aquesta resposta prèvia, encara que no coincideixi amb la resposta esperada genèrica.']
+      : []),
     'La puntuació ha de ser un nombre entre 0 i la puntuació màxima. Escriu el comentari en català, breu i justificat.',
   ].join('\n\n');
 }

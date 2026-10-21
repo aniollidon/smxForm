@@ -180,6 +180,10 @@ export default function QuizEditor() {
 
   const entries = toEditorEntries(quiz.questions, quiz.groups || []);
   const numberOf = new Map(quiz.questions.map((q, k) => [q.id, k + 1]));
+  const linkChoicesFor = (draft) => {
+    const end = draft.id ? quiz.questions.findIndex((q) => q.id === draft.id) : quiz.questions.length;
+    return quiz.questions.slice(0, end).map((q, k) => ({ id: q.id, label: `${k + 1}. ${q.text.slice(0, 60)}` }));
+  };
   const swap = (list, i, d) => { const next = [...list]; [next[i], next[i + d]] = [next[i + d], next[i]]; return next; };
   const addSection = (list, i) => [...list.slice(0, i), { kind: 'section', title: 'Secció nova' }, ...list.slice(i)];
   // Dues seccions seguides o una secció final no tenen cap pregunta on guardar-se.
@@ -213,7 +217,7 @@ export default function QuizEditor() {
     await commit(next);
   };
   const questionRow = (q, inGroup, controls, menu = []) => (editing?.id === q.id ? (
-    <QuestionEditor key={q.id} initial={editing} onSave={save} onCancel={closeEditor} />
+    <QuestionEditor key={q.id} initial={editing} onSave={save} onCancel={closeEditor} linkChoices={linkChoicesFor(editing)} />
   ) : (
     <div className={`${inGroup ? 'group-member' : 'card'} row between quiz-question-row`}>
       <div className="quiz-question-summary">
@@ -420,7 +424,7 @@ export default function QuizEditor() {
                   </div>
                 ))}
                 {members.length === 0 && <p className="muted">Aquest grup encara no té preguntes.</p>}
-                {editing && !editing.id && editingGroup === group.id && <QuestionEditor initial={editing} onSave={save} onCancel={closeEditor} />}
+                {editing && !editing.id && editingGroup === group.id && <QuestionEditor initial={editing} onSave={save} onCancel={closeEditor} linkChoices={linkChoicesFor(editing)} />}
               </div>
               {!editing && (
                 <div className="row">
@@ -449,7 +453,7 @@ export default function QuizEditor() {
           </div>
         );
       })}
-      {editing && !editing.id && editingGroup === null && <QuestionEditor initial={editing} onSave={save} onCancel={closeEditor} />}
+      {editing && !editing.id && editingGroup === null && <QuestionEditor initial={editing} onSave={save} onCancel={closeEditor} linkChoices={linkChoicesFor(editing)} />}
       {!editing && (
         <div className="card quiz-add-question">
           <strong>Afegeix una pregunta</strong>

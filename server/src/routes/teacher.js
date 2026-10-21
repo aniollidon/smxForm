@@ -9,6 +9,7 @@ const { regradeAttempt, getGradingStatus } = require('../grading/regrade');
 const { evaluateAnswers } = require('../services/llm');
 const { validateDefinition, personalize, parseAnswer } = require('../grading/calculated');
 const { requireTeacher } = require('../auth');
+const { describeAnswer } = require('../services/linkedAnswer');
 
 const router = express.Router();
 router.use(requireTeacher);
@@ -83,6 +84,7 @@ const questionSchema = z.object({
   points: z.number().min(0).max(1000).default(1),
   required: z.boolean().default(true),
   shuffleOptions: z.boolean().default(true),
+  linkedQuestionId: z.number().int().nullable().optional(),
   config: z.any().default({}),
   answerKey: z.any().default({}),
 });
@@ -144,6 +146,29 @@ async function ownQuiz(req, include) {
   const quiz = await prisma.quiz.findUnique({ where: { id: Number(req.params.id) }, include });
   if (!quiz || quiz.teacherId !== req.user.id) throw fail(404, 'Quiz no trobat');
   return quiz;
+}
+
+// La pregunta enllaçada ha de ser d'aquest quiz, diferent de la pròpia i anterior en l'ordre.
+async function checkLink(quizId, linkedId, self) {
+  if (linkedId == null) return;
+  const linked = await prisma.question.findFirst({ where: { id: linkedId, quizId } });
+  if (!linked || linked.id === self?.id || (self && linked.order >= self.order)) throw fail(400, 'Pregunta enllaçada invàlida');
+}
+
+// Desfà els enllaços que, després de reordenar, ja no apunten a una pregunta anterior.
+async function dropInvalidLinks(quizId) {
+  const questions = await prisma.question.findMany({ where: { quizId }, select: { id: true, order: true, linkedQuestionId: true } });
+  const orderOf = new Map(questions.map((q) => [q.id, q.order]));
+  const broken = questions.filter((q) => q.linkedQuestionId != null && !(orderOf.get(q.linkedQuestionId) < q.order)).map((q) => q.id);
+  if (broken.length) await prisma.question.updateMany({ where: { id: { in: broken } }, data: { linkedQuestionId: null } });
+}
+
+// Resposta de l'alumne a la pregunta enllaçada, dins del mateix intent.
+function linkedAnswerFor(question, questionsById, answersByQuestion, seed) {
+  const linked = question.linkedQuestionId != null ? questionsById.get(question.linkedQuestionId) : null;
+  if (!linked) return null;
+  const answer = answersByQuestion.get(linked.id);
+  return { question: personalize(present(linked), seed), value: answer ? JSON.parse(answer.value) : null, fileUrl: answer?.fileUrl ?? null };
 }
 
 async function gradingStatusFor(quiz) {
@@ -247,8 +272,15 @@ router.post('/quizzes/:id/duplicate', wrap(async (req, res) => {
     for (const group of groups) {
       groupIds.set(group.id, (await tx.questionGroup.create({ data: { quizId: created.id, text: group.text } })).id);
     }
-    for (const { id: _q, quizId, groupId, ...q } of questions) {
-      await tx.question.create({ data: { ...q, quizId: created.id, groupId: groupId ? groupIds.get(groupId) : null } });
+    const questionIds = new Map();
+    for (const { id: oldId, quizId, groupId, linkedQuestionId, ...q } of questions) {
+      const copied = await tx.question.create({ data: { ...q, quizId: created.id, groupId: groupId ? groupIds.get(groupId) : null } });
+      questionIds.set(oldId, copied.id);
+    }
+    for (const { id: oldId, linkedQuestionId } of questions) {
+      if (linkedQuestionId != null && questionIds.has(linkedQuestionId)) {
+        await tx.question.update({ where: { id: questionIds.get(oldId) }, data: { linkedQuestionId: questionIds.get(linkedQuestionId) } });
+      }
     }
     return created;
   });
@@ -261,6 +293,7 @@ router.post('/quizzes/:id/questions', wrap(async (req, res) => {
   const groupId = z.object({ groupId: z.number().int().nullable().optional() }).parse(req.body).groupId ?? null;
   const existing = await prisma.question.findMany({ where: { quizId: quiz.id }, orderBy: { order: 'asc' }, select: { id: true, groupId: true } });
   if (groupId !== null && !(await prisma.questionGroup.findFirst({ where: { id: groupId, quizId: quiz.id } }))) throw fail(400, 'Grup invàlid');
+  await checkLink(quiz.id, data.linkedQuestionId);
   const [q] = await prisma.$transaction([
     prisma.question.create({ data: { ...data, quizId: quiz.id, groupId, order: existing.length } }),
     prisma.quiz.update({ where: { id: quiz.id }, data: { gradingVersion: { increment: 1 } } }),
@@ -271,6 +304,7 @@ router.post('/quizzes/:id/questions', wrap(async (req, res) => {
     const lastMember = existing.reduce((last, x, i) => (x.groupId === groupId ? i : last), ids.length - 1);
     ids.splice(lastMember + 1, 0, q.id);
     await prisma.$transaction(ids.map((qid, order) => prisma.question.update({ where: { id: qid }, data: { order } })));
+    await dropInvalidLinks(quiz.id);
   }
   res.status(201).json(present(q));
 }));
@@ -322,6 +356,7 @@ router.put('/quizzes/:id/layout', wrap(async (req, res) => {
     data: { order, groupId: x.groupId, sectionTitle: x.sectionTitle || null },
   })));
   await dropEmptyGroups(quiz.id);
+  await dropInvalidLinks(quiz.id);
   res.json({ ok: true });
 }));
 
@@ -333,8 +368,10 @@ async function ownQuestion(req) {
 
 router.put('/questions/:qid', wrap(async (req, res) => {
   const current = await ownQuestion(req);
+  const data = parseQuestion(req.body);
+  await checkLink(current.quizId, data.linkedQuestionId, current);
   const [q] = await prisma.$transaction([
-    prisma.question.update({ where: { id: Number(req.params.qid) }, data: { ...parseQuestion(req.body), gradingVersion: { increment: 1 } } }),
+    prisma.question.update({ where: { id: Number(req.params.qid) }, data: { ...data, gradingVersion: { increment: 1 } } }),
     prisma.quiz.update({ where: { id: current.quizId }, data: { gradingVersion: { increment: 1 } } }),
   ]);
   res.json(present(q));
@@ -356,6 +393,7 @@ router.put('/quizzes/:id/reorder', wrap(async (req, res) => {
   const valid = new Set(quiz.questions.map((q) => q.id));
   if (ids.length !== valid.size || !ids.every((i) => valid.has(i))) throw fail(400, 'Llista invàlida');
   await prisma.$transaction(ids.map((qid, order) => prisma.question.update({ where: { id: qid }, data: { order } })));
+  await dropInvalidLinks(quiz.id);
   res.json({ ok: true });
 }));
 
@@ -396,12 +434,21 @@ router.post('/quizzes/:id/regrade', wrap(async (req, res) => {
 router.get('/attempts/:aid', wrap(async (req, res) => {
   const a = await prisma.attempt.findUnique({
     where: { id: Number(req.params.aid) },
-    include: { quiz: { include: { groups: true } }, user: { select: { email: true, name: true } }, answers: { include: { question: true } } },
+    include: { quiz: { include: { groups: true, questions: true } }, user: { select: { email: true, name: true } }, answers: { include: { question: true } } },
   });
   if (!a || a.quiz.teacherId !== req.user.id) throw fail(404, 'Intent no trobat');
+  const questionsById = new Map(a.quiz.questions.map((q) => [q.id, q]));
+  const answersByQuestion = new Map(a.answers.map((x) => [x.questionId, x]));
+  const { questions: _questions, ...quiz } = a.quiz;
   res.json({
     ...a,
-    answers: a.answers.map((x) => ({ ...x, value: JSON.parse(x.value), question: personalize(present(x.question), a.seed) })),
+    quiz,
+    answers: a.answers.map((x) => ({
+      ...x,
+      value: JSON.parse(x.value),
+      question: personalize(present(x.question), a.seed),
+      linkedAnswer: linkedAnswerFor(x.question, questionsById, answersByQuestion, a.seed),
+    })),
   });
 }));
 
@@ -419,10 +466,17 @@ router.get('/questions/:qid/answers', wrap(async (req, res) => {
     include: { attempt: { include: { user: { select: { name: true, email: true } } } } },
     orderBy: { id: 'desc' },
   });
+  const linkedQuestion = question.linkedQuestionId != null ? await prisma.question.findUnique({ where: { id: question.linkedQuestionId } }) : null;
+  const linkedAnswers = linkedQuestion ? await prisma.answer.findMany({ where: { questionId: linkedQuestion.id, attemptId: { in: answers.map((answer) => answer.attemptId) } } }) : [];
+  const linkedByAttempt = new Map(linkedAnswers.map((answer) => [answer.attemptId, answer]));
   res.json({
     question: present(question),
     quizId: question.quizId,
-    answers: answers.map((answer) => ({ ...answer, value: JSON.parse(answer.value) })),
+    answers: answers.map((answer) => ({
+      ...answer,
+      value: JSON.parse(answer.value),
+      linkedAnswer: linkedQuestion ? linkedAnswerFor(question, new Map([[linkedQuestion.id, linkedQuestion]]), new Map([[linkedQuestion.id, linkedByAttempt.get(answer.attemptId)]]), answer.attempt.seed) : null,
+    })),
   });
 }));
 
@@ -448,10 +502,20 @@ router.post('/questions/:qid/ai-grade', wrap(async (req, res) => {
       questionId: question.id,
       attempt: { status: { not: 'IN_PROGRESS' } },
     },
+    include: { attempt: { select: { seed: true } } },
   });
   if (answers.length !== body.answerIds.length) throw fail(400, 'La selecció inclou respostes que no pertanyen a aquesta pregunta o no s’han lliurat');
   const answerById = new Map(answers.map((answer) => [answer.id, answer]));
   const questionConfig = JSON.parse(question.config);
+  const linkedQuestion = question.linkedQuestionId != null ? await prisma.question.findUnique({ where: { id: question.linkedQuestionId } }) : null;
+  const linkedAnswers = linkedQuestion ? await prisma.answer.findMany({ where: { questionId: linkedQuestion.id, attemptId: { in: answers.map((answer) => answer.attemptId) } } }) : [];
+  const linkedByAttempt = new Map(linkedAnswers.map((answer) => [answer.attemptId, answer]));
+  const linkedContext = (answer) => {
+    if (!linkedQuestion) return {};
+    const personalized = personalize(present(linkedQuestion), answer.attempt.seed);
+    const linked = linkedByAttempt.get(answer.attemptId);
+    return { previousQuestion: personalized.text, previousAnswer: describeAnswer(personalized, linked ? JSON.parse(linked.value) : null) };
+  };
   const selected = body.answerIds.map((answerId) => {
     const answer = answerById.get(answerId);
     const value = JSON.parse(answer.value);
@@ -466,12 +530,13 @@ router.post('/questions/:qid/ai-grade', wrap(async (req, res) => {
         answerId: answer.id,
         value: {
           columns: questionConfig.columns,
-          rows: questionConfig.rows.map((label, index) => ({ label, cells: value[index] })),
+          rows: questionConfig.rows.map((label, index) => ({ label, cells: questionConfig.columns.map((column, j) => ({ column, value: value[index][j] })) })),
         },
+        ...linkedContext(answer),
       };
     }
     if (typeof value !== 'string' || !value.trim()) throw fail(400, 'No es poden avaluar respostes buides o no textuals');
-    return { answerId: answer.id, value };
+    return { answerId: answer.id, value, ...linkedContext(answer) };
   });
 
   const answerKey = JSON.parse(question.answerKey);

@@ -28,6 +28,14 @@ function Value({ a }) {
         </div>
       );
     case 'CALCULATED': return <p>{String(value)} <span className="muted">(correcte: {q.answerKey.expected})</span></p>;
+    case 'TABLE': return (
+      <div className="table-scroll">
+        <table className="table-answer">
+          <thead><tr><th scope="col"></th>{q.config.columns.map((column, index) => <th scope="col" key={index}>{column}</th>)}</tr></thead>
+          <tbody>{q.config.rows.map((row, i) => <tr key={i}><th scope="row">{row}</th>{q.config.columns.map((_, j) => <td key={j}>{value[i]?.[j] || '—'}</td>)}</tr>)}</tbody>
+        </table>
+      </div>
+    );
     case 'FILL_BLANKS': return <ol>{q.answerKey.blanks.map((accepted, i) => <li key={i}>{value[i] || '—'} <span className="muted">(correcte: {accepted.join(' / ')})</span></li>)}</ol>;
     default: return <p style={{ whiteSpace: 'pre-wrap' }}>{String(value)}</p>;
   }
@@ -94,6 +102,13 @@ export default function AttemptReview() {
             <div className="review-question-title"><span className="review-question-number">{String(index + 1).padStart(2, '0')}</span><MarkdownText>{a.question.text}</MarkdownText></div>
             <span className={`review-score${a.needsReview ? ' is-pending' : a.score != null && a.score <= 0 ? ' is-negative' : ''}`}>{a.score == null ? 'Pendent' : formatGrade(a.score)} <i>/ {formatGrade(a.question.points)}</i></span>
           </div>
+          {a.linkedAnswer && (
+            <div className="review-linked-answer">
+              <span className="eyebrow">RESPOSTA ANTERIOR ENLLAÇADA</span>
+              <div className="review-linked-question"><MarkdownText>{a.linkedAnswer.question.text}</MarkdownText></div>
+              <Value a={a.linkedAnswer} />
+            </div>
+          )}
           <div className="review-answer"><Value a={a} /></div>
           {a.question.answerKey.reference && <p className="review-reference"><span>REFERÈNCIA</span>{a.question.answerKey.reference}</p>}
           <div className="review-grading">

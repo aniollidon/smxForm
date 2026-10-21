@@ -4,7 +4,7 @@ import { ImageWithPoints } from './QuestionInput.jsx';
 import DrawingBoard from './DrawingBoard.jsx';
 import { TYPE_LABELS, uid, toPayload, validateDraft, countBlanks } from '../questionModel';
 
-export default function QuestionEditor({ initial, onSave, onCancel }) {
+export default function QuestionEditor({ initial, onSave, onCancel, linkChoices = [] }) {
   const [d, setD] = useState(initial);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
@@ -252,6 +252,15 @@ export default function QuestionEditor({ initial, onSave, onCancel }) {
       )}
       {(d.type === 'SHORT_TEXT' || d.type === 'FILL_BLANKS') && <p className="muted">S’autoavalua; el professor pot revisar i ajustar la puntuació manualment si cal.</p>}
       {(d.type === 'LONG_TEXT' || d.type === 'IMAGE_UPLOAD' || d.type === 'DRAWING') && <p className="muted">Aquesta pregunta es corregeix manualment.</p>}
+
+      {linkChoices.length > 0 && (
+        <label>Enllaçada amb una pregunta anterior (només visible per al professor)
+          <select value={d.linkedQuestionId ?? ''} onChange={(e) => set({ linkedQuestionId: e.target.value ? Number(e.target.value) : null })}>
+            <option value="">Cap</option>
+            {linkChoices.map((choice) => <option key={choice.id} value={choice.id}>{choice.label}</option>)}
+          </select>
+        </label>
+      )}
 
       {err && <p className="error">{err}</p>}
       <div className="row">
