@@ -377,7 +377,7 @@ export default function TakeQuiz() {
           <div className="review-question-text">{q.type !== 'FILL_BLANKS' && <MarkdownText>{q.text}</MarkdownText>} {q.required && <span className="error">*</span>} <span className="muted">({formatGrade(q.points)} pt)</span></div>
         </div>
       </div>
-      {q.type !== 'IMAGE_LABEL' && q.type !== 'DRAWING' && q.imageUrl && <img src={`/api/files/${q.imageUrl}`} alt="" style={{ maxWidth: '100%' }} />}
+      {q.type !== 'IMAGE_LABEL' && q.type !== 'DRAWING' && q.imageUrl && <img src={`/api/files/${q.imageUrl}`} alt={`Imatge de la pregunta ${i + 1}`} style={{ maxWidth: '100%' }} />}
       <div className="question-response">
         <QuestionInput
           q={q}
@@ -397,7 +397,7 @@ export default function TakeQuiz() {
     <div className="take-quiz">
       <title>{data.title}</title>
       <header className="take-quiz-header">
-        <h2>{data.title}</h2>
+        <h1 className="take-quiz-title">{data.title}</h1>
         <p className={`take-quiz-save-state${saveState.startsWith('Error') ? ' is-error' : ''}`} aria-live="polite">
           {saveState || 'Les respostes es desen automàticament.'}
         </p>

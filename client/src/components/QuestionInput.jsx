@@ -6,10 +6,10 @@ import MarkdownText from './MarkdownText.jsx';
 import { splitBlanks } from '../questionModel.js';
 import { isNumericAnswer } from '../layout.js';
 
-export function ImageWithPoints({ src, points = [], onClick }) {
+export function ImageWithPoints({ src, points = [], onClick, alt = 'Imatge de la pregunta amb punts numerats' }) {
   return (
     <div className="imgwrap" onClick={onClick} style={onClick ? { cursor: 'crosshair' } : undefined}>
-      <img src={src} alt="" draggable={false} />
+      <img src={src} alt={alt} draggable={false} />
       {points.map((p, i) => (
         <span key={p.id} className="marker" style={{ left: `${p.x}%`, top: `${p.y}%` }}>{i + 1}</span>
       ))}

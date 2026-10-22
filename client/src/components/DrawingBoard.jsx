@@ -74,7 +74,7 @@ export default function DrawingBoard({ src, color = '#e11d48', width = 4, value,
         </div>
       )}
       <div className="imgwrap drawing-board">
-        <img src={src} alt="" draggable={false} ref={(el) => el?.complete && el.naturalWidth && setRatio((r) => { const n = el.naturalHeight / el.naturalWidth; return r === n ? r : n; })} onLoad={(e) => e.currentTarget.naturalWidth && setRatio(e.currentTarget.naturalHeight / e.currentTarget.naturalWidth)} />
+        <img src={src} alt="Imatge de base del dibuix" draggable={false} ref={(el) => el?.complete && el.naturalWidth && setRatio((r) => { const n = el.naturalHeight / el.naturalWidth; return r === n ? r : n; })} onLoad={(e) => e.currentTarget.naturalWidth && setRatio(e.currentTarget.naturalHeight / e.currentTarget.naturalWidth)} />
         <svg
           ref={svg}
           viewBox={`0 0 ${W} ${H}`}

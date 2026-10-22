@@ -26,7 +26,7 @@ export default function QuizLanding() {
   return (
     <div className="card stack">
       <title>{data.title}</title>
-      <h2>{data.title}</h2>
+      <h1 className="page-title">{data.title}</h1>
       <p style={{ whiteSpace: 'pre-wrap' }}>{data.description}</p>
       <p className="muted">Intents: {data.attemptsUsed} / {data.maxAttempts}</p>
       {data.attempts.filter((a) => a.status !== 'IN_PROGRESS').map((a) => (
