@@ -6,6 +6,7 @@ import { formatGrade } from '../formatGrade.js';
 import DrawingBoard from '../components/DrawingBoard.jsx';
 import MarkdownText from '../components/MarkdownText.jsx';
 import LlmRunModal from '../components/LlmRunModal.jsx';
+import AutoGrowTextarea from '../components/AutoGrowTextarea.jsx';
 
 const defaultCriteria = 'Avalua l’exactitud, la pertinència i la completesa de la resposta respecte de l’enunciat i la resposta esperada. Assigna una puntuació proporcional als punts assolits i justifica-la breument.';
 
@@ -33,12 +34,9 @@ function AnswerReviewForm({ answer, question, onDone }) {
 
   return (
     <div className="question-answer-form">
-      <div className="question-answer-meta">
-        {answer.feedback && <span className="muted">Comentari desat</span>}
-      </div>
       <div className="review-manual-form">
         <label className="review-score-field">Puntuació <input type="number" min="0" max={question.points} step="0.25" value={score} onChange={(e) => setScore(e.target.value)} /></label>
-        <label className="review-feedback-field">Comentari per a aquest alumne <textarea rows="2" maxLength={2000} placeholder="Opcional" value={feedback} onChange={(e) => setFeedback(e.target.value)} /></label>
+        <label className="review-feedback-field">Comentari per a aquest alumne <AutoGrowTextarea minRows={2} maxLength={2000} placeholder="Opcional" value={feedback} onChange={(e) => setFeedback(e.target.value)} /></label>
         <button onClick={save} disabled={saving}>{saving ? 'Desant…' : 'Desa correcció'}</button>
       </div>
       {error && <p className="error">{error}</p>}
@@ -284,7 +282,7 @@ export default function QuestionReview() {
       : [...current, answerId]);
   };
   const toggleCardSelection = (event, answerId) => {
-    if (event.target.closest('a, button, input, textarea, select, label, .question-answer-form')) return;
+    if (event.target.closest('a, button, input, textarea, select, label, .question-answer-form, .question-answer-feedback')) return;
     if (gradingWithAi || savingManual) return;
     if (gradingMode === 'manual') {
       selectManualAnswer(answerId);
@@ -455,6 +453,12 @@ export default function QuestionReview() {
                 </div>
               )}
               <div className="question-answer-content"><AnswerValue answer={answer} question={data.question} /></div>
+              {answer.feedback && (
+                <div className="question-answer-feedback">
+                  <span className="eyebrow">COMENTARI DEL PROFESSOR</span>
+                  <p>{answer.feedback}</p>
+                </div>
+              )}
               {gradingMode === 'manual' && selectedAnswerIds.includes(answer.id) && (
                 <AnswerReviewForm answer={answer} question={data.question} onDone={() => answerSaved(answer.id)} />
               )}

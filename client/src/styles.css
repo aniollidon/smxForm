@@ -341,6 +341,7 @@ tr:last-child td { border-bottom: 0; }
 .review-manual-form { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
 .review-manual-form label { min-width: 118px; }
 .review-manual-form label input { margin-top: 4px; }
+.review-manual-form label textarea { display: block; width: 100%; min-height: 58px; margin-top: 4px; padding: 8px 9px; overflow: hidden; resize: vertical; line-height: 1.45; }
 .review-manual-form .review-feedback-field { min-width: min(240px, 100%); flex: 1; }
 .question-review { max-width: 1040px; margin: 0 auto; }
 .question-review-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 30px; padding: 25px 0; border-top: 1px solid #393939; border-bottom: 1px solid #393939; }
@@ -399,6 +400,9 @@ tr:last-child td { border-bottom: 0; }
 .question-answer-score.is-pending { color: #f0d58f; }
 .question-answer-content { min-height: 64px; padding: 18px 20px; color: #e5e5e5; overflow-wrap: anywhere; white-space: pre-wrap; }
 .question-answer-content img { display: block; max-width: min(100%, 560px); max-height: 420px; object-fit: contain; }
+.question-answer-feedback { display: grid; gap: 6px; padding: 15px 20px; border-top: 1px solid #3b3b3b; background: #1f1f1f; color: #dcdcdc; font-size: 13px; line-height: 1.5; }
+.question-answer-feedback .eyebrow { color: #8999ff; }
+.question-answer-feedback p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .question-answer-form { display: grid; gap: 12px; padding: 17px 20px 20px; border-top: 1px solid #3b3b3b; background: #232323; }
 .question-answer-form > .review-manual-form { display: grid; grid-template-columns: minmax(110px, 150px) minmax(220px, 1fr) auto; align-items: end; gap: 14px; }
 .question-answer-form .review-manual-form label { display: grid; min-width: 0; gap: 6px; color: #c9c9c9; font-size: 11px; }
@@ -486,6 +490,7 @@ tr:last-child td { border-bottom: 0; }
   .question-answer-header-actions > a { max-width: 105px; text-align: right; white-space: normal; }
   .question-answer-score { text-align: right; }
   .question-answer-content { padding: 16px 15px; }
+  .question-answer-feedback { padding: 14px 15px; }
   .question-answer-form { padding: 15px; }
   .question-answer-form > .review-manual-form { grid-template-columns: minmax(0, 1fr); gap: 12px; }
   .question-answer-form .review-manual-form .review-score-field { max-width: 170px; }

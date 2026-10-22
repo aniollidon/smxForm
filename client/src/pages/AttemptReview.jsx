@@ -7,6 +7,7 @@ import DrawingBoard from '../components/DrawingBoard.jsx';
 import { formatGrade } from '../formatGrade.js';
 import { QuestionFlow } from '../components/QuestionBlocks.jsx';
 import MarkdownText from '../components/MarkdownText.jsx';
+import AutoGrowTextarea from '../components/AutoGrowTextarea.jsx';
 
 const optText = (q, list, id) => q.config[list].find((x) => x.id === id)?.text ?? id;
 
@@ -60,7 +61,7 @@ function ReviewForm({ a, onDone }) {
   return (
     <div className="review-manual-form">
       <label>Puntuació <input type="number" min="0" max={a.question.points} step="0.25" value={score} onChange={(e) => setScore(e.target.value)} /></label>
-      <label className="review-feedback-field">Comentari <input type="text" placeholder="Comentari per a aquest alumne" value={feedback} onChange={(e) => setFeedback(e.target.value)} /></label>
+      <label className="review-feedback-field">Comentari <AutoGrowTextarea minRows={2} maxLength={2000} placeholder="Comentari per a aquest alumne" value={feedback} onChange={(e) => setFeedback(e.target.value)} /></label>
       <button onClick={save} disabled={saving}>{saving ? 'Desant…' : 'Desa correcció'}</button>
       {err && <span className="error">{err}</span>}
     </div>
