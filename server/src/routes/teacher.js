@@ -183,6 +183,37 @@ router.get('/me', (req, res) => {
   res.json({ classroomConnected: !!req.user.googleTokens });
 });
 
+// Alumnes que el professorat pot veure "com si fos ells"
+router.get('/students', wrap(async (req, res) => {
+  const q = String(req.query.q || '').trim().slice(0, 60);
+  const students = await prisma.user.findMany({
+    where: {
+      role: 'STUDENT',
+      ...(q ? { OR: [{ email: { contains: q } }, { name: { contains: q } }] } : {}),
+    },
+    orderBy: { email: 'asc' },
+    take: 100,
+    select: { id: true, email: true, name: true, _count: { select: { attempts: true } } },
+  });
+  res.json(students.map((student) => ({ id: student.id, email: student.email, name: student.name, attempts: student._count.attempts })));
+}));
+
+router.post('/impersonate', wrap(async (req, res, next) => {
+  if (req.session.impersonatorId) throw fail(409, 'Ja estàs veient com a un alumne');
+  const { userId } = z.object({ userId: z.number().int().positive() }).parse(req.body);
+  const student = await prisma.user.findUnique({ where: { id: userId } });
+  if (!student || student.role !== 'STUDENT') throw fail(404, 'Alumne no trobat');
+  const teacherId = req.user.id;
+  req.session.impersonatorId = teacherId;
+  req.login(student, (err) => {
+    if (err) {
+      delete req.session.impersonatorId;
+      return next(err);
+    }
+    res.json({ ok: true, student: { id: student.id, email: student.email, name: student.name } });
+  });
+}));
+
 router.get('/llm-models', (req, res) => {
   res.json(llmOptions());
 });

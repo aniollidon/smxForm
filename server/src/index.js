@@ -8,7 +8,7 @@ const path = require('path');
 const fs = require('fs');
 const { ZodError } = require('zod');
 const prisma = require('./db');
-const { router: authRouter, setupPassport } = require('./auth');
+const { router: authRouter, setupPassport, impersonatorId } = require('./auth');
 const teacherRouter = require('./routes/teacher');
 const { router: studentRouter } = require('./routes/student');
 const filesRouter = require('./routes/files');
@@ -58,10 +58,15 @@ app.use((req, res, next) => {
 });
 
 app.use('/auth', rateLimit({ windowMs: 60_000, limit: 60 }), authRouter);
-app.get('/api/me', (req, res) => {
+app.get('/api/me', (req, res, next) => {
   if (!req.user) return res.status(401).json({ error: 'No autenticat' });
   const { id, email, name, role } = req.user;
-  res.json({ id, email, name, role });
+  const teacherId = impersonatorId(req);
+  if (!teacherId) return res.json({ id, email, name, role, impersonatedBy: null });
+  prisma.user
+    .findUnique({ where: { id: teacherId }, select: { id: true, email: true, name: true } })
+    .then((teacher) => res.json({ id, email, name, role, impersonatedBy: teacher || null }))
+    .catch(next);
 });
 app.use('/api', rateLimit({ windowMs: 60_000, limit: 600 }));
 app.use('/api/teacher', teacherRouter);

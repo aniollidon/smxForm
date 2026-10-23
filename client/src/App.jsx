@@ -15,6 +15,7 @@ import QuizPreview from './pages/QuizPreview.jsx';
 import ArchitectureArt from './components/ArchitectureArt.jsx';
 import { PromptProvider } from './components/PromptProvider.jsx';
 import AccessibilityControls from './components/AccessibilityControls.jsx';
+import ImpersonationMenu from './components/ImpersonationMenu.jsx';
 import { AccessibilityProvider, useAccessibility } from './components/AccessibilityProvider.jsx';
 
 function Login() {
@@ -85,10 +86,29 @@ function Layout({ user, children }) {
     qc.clear();
     window.location.href = '/login';
   };
+  const stopImpersonation = async () => {
+    await api('/auth/impersonate/stop', { method: 'POST' });
+    qc.clear();
+    window.location.href = '/t';
+  };
   return (
     <div className={`app-shell${a11yActive ? ' a11y-view' : ''}`} data-a11y-theme={a11yActive ? a11y.theme : undefined}>
       <a className="skip-link" href="#main-content">Salta al contingut principal</a>
-      <div className="announcement-bar"><span>palamForm</span><span>ENTORN D'APRENENTATGE DIGITAL</span><span className="announcement-status"><i /> OPERATIU</span></div>
+      <div className={`announcement-bar${user.impersonatedBy ? ' is-impersonating' : ''}`}>
+        <span>palamForm</span>
+        {user.impersonatedBy ? (
+          <span className="announcement-impersonation" role="status">
+            <span className="announcement-impersonation-label">VEIENT COM A</span>
+            <b>{user.email}</b>
+            <button type="button" className="announcement-impersonation-exit" onClick={stopImpersonation}>
+              Torna a la vista professor
+            </button>
+          </span>
+        ) : (
+          <span>ENTORN D'APRENENTATGE DIGITAL</span>
+        )}
+        <span className="announcement-status"><i /> OPERATIU</span>
+      </div>
       <header className="top app-header">
         <Link className="brand-lockup" to={user.role === 'TEACHER' ? '/t' : '/s'} aria-label="palamForm, inici">
           <span className="brand-mark"><i /><i /><i /><i /></span><span>palam<span>Form</span></span>
@@ -99,6 +119,7 @@ function Layout({ user, children }) {
         </nav>
         <div className={`account-nav${a11yAvailable ? ' has-a11y' : ''}`}>
           {a11yAvailable && <AccessibilityControls />}
+          {user.role === 'TEACHER' && <ImpersonationMenu />}
           <span className="account-email">{user.email}</span>
           <button className="logout-button" onClick={logout}>Surt <span aria-hidden="true">↗</span></button>
         </div>

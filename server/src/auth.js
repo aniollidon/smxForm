@@ -55,6 +55,8 @@ router.get(
   (req, res) => {
     const next = safeNext(req.session.next);
     delete req.session.next;
+    // En entrar de nou s'amaga qualsevol impersonació anterior
+    delete req.session.impersonatorId;
     res.redirect(next);
   }
 );
@@ -71,6 +73,7 @@ if (devLogin) {
         update: { role: 'STUDENT' },
         create: { email, name: `Alumne prova ${n}`, role: 'STUDENT' },
       });
+      delete req.session.impersonatorId;
       req.login(user, (err) => (err ? next(err) : res.redirect(safeNext(req.query.next || '/s'))));
     } catch (e) {
       next(e);
@@ -84,6 +87,7 @@ if (devLogin) {
         update: { role: 'TEACHER' },
         create: { email, name: 'Professor prova', role: 'TEACHER' },
       });
+      delete req.session.impersonatorId;
       req.login(user, (err) => (err ? next(err) : res.redirect(safeNext(req.query.next || '/t'))));
     } catch (e) {
       next(e);
@@ -94,6 +98,29 @@ if (devLogin) {
 router.post('/logout', (req, res) => {
   req.session = null;
   res.json({ ok: true });
+});
+
+// Impersonació: el professorat pot navegar com un alumne concret.
+// L'id del professor es desa a la mateixa sessió per poder-hi tornar.
+const impersonatorId = (req) => (req.session?.impersonatorId ? Number(req.session.impersonatorId) : null);
+
+router.post('/impersonate/stop', async (req, res, next) => {
+  try {
+    const teacherId = impersonatorId(req);
+    if (!teacherId) return res.status(400).json({ error: 'No estàs veient com a cap alumne' });
+    const teacher = await prisma.user.findUnique({ where: { id: teacherId } });
+    if (!teacher || teacher.role !== 'TEACHER') {
+      delete req.session.impersonatorId;
+      return res.status(403).json({ error: 'No autoritzat' });
+    }
+    req.login(teacher, (err) => {
+      if (err) return next(err);
+      delete req.session.impersonatorId;
+      res.json({ ok: true });
+    });
+  } catch (e) {
+    next(e);
+  }
 });
 
 // Connexió de Classroom (només professors)
@@ -120,4 +147,4 @@ function requireTeacher(req, res, next) {
   next();
 }
 
-module.exports = { router, setupPassport, requireAuth, requireTeacher };
+module.exports = { router, setupPassport, requireAuth, requireTeacher, impersonatorId };

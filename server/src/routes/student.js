@@ -4,7 +4,7 @@ const crypto = require('crypto');
 const prisma = require('../db');
 const classroom = require('../services/classroom');
 const { scoreQuestion, computeAttemptScore, shuffle, isAnswered, getInvalidNumericFields } = require('../grading');
-const { requireAuth } = require('../auth');
+const { requireAuth, impersonatorId } = require('../auth');
 const { instantiate, personalize } = require('../grading/calculated');
 
 const router = express.Router();
@@ -94,10 +94,14 @@ function attemptResult(attempt, quiz, questions, answers) {
   return base;
 }
 
-router.get('/me', (req, res) => {
+router.get('/me', wrap(async (req, res) => {
   const { id, email, name, role } = req.user;
-  res.json({ id, email, name, role });
-});
+  const teacherId = impersonatorId(req);
+  const impersonatedBy = teacherId
+    ? await prisma.user.findUnique({ where: { id: teacherId }, select: { id: true, email: true, name: true } })
+    : null;
+  res.json({ id, email, name, role, impersonatedBy });
+}));
 
 router.get('/attempts', wrap(async (req, res) => {
   const attempts = await prisma.attempt.findMany({
