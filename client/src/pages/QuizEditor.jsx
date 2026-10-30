@@ -29,7 +29,7 @@ const courseSummary = (course) => {
   if (!course.ok) return course.error;
   const parts = [`${course.count} alumne(s)`, STUDENT_SOURCES[course.source] || course.source];
   if (course.raw && !course.count) parts.push(`el Classroom n’ha retornat ${course.raw}`);
-  if (course.skipped) parts.push(`${course.skipped} sense correu`);
+  if (course.skipped) parts.push(`${course.skipped} sense identificador`);
   return parts.join(' · ');
 };
 
@@ -109,7 +109,7 @@ function ExtensionsPanel({ quiz, onSaved }) {
   const [msg, setMsg] = useState('');
   const searchRef = useRef(null);
   const listRef = useRef(null);
-  const withExtension = new Set(extensions.map((x) => x.email));
+  const withExtension = new Set(extensions.map((x) => x.identifier));
 
   // Es torna a demanar el llistat per a cada entrega i cada conjunt de cursos vinculats.
   const { data, isPending, isError, error, isFetching, refetch } = useQuery({
@@ -127,7 +127,7 @@ function ExtensionsPanel({ quiz, onSaved }) {
     const terms = fold(search).trim().split(/\s+/).filter(Boolean);
     if (!terms.length) return roster;
     return roster.filter((student) => {
-      const haystack = fold(`${student.name || ''} ${student.email}`);
+      const haystack = fold(`${student.name || ''} ${student.email || ''} ${student.identifier || ''} ${student.externalId || ''}`);
       return terms.every((term) => haystack.includes(term));
     });
   }, [roster, search]);
@@ -162,7 +162,7 @@ function ExtensionsPanel({ quiz, onSaved }) {
   const pick = (student) => {
     if (!student) return;
     setPicked(student);
-    const existing = extensions.find((x) => x.email === student.email);
+    const existing = extensions.find((x) => x.identifier === student.identifier);
     if (existing) {
       const parts = localParts(existing.expiresAt);
       setDate(parts.date);
@@ -179,7 +179,7 @@ function ExtensionsPanel({ quiz, onSaved }) {
     setEditing(true);
     setMsg('');
     setSearch('');
-    setPicked({ email: ext.email, name: ext.name });
+    setPicked({ identifier: ext.identifier, externalId: ext.externalId, email: ext.email || '', name: ext.name });
     const parts = localParts(ext.expiresAt);
     setDate(parts.date);
     setTime(parts.time);
@@ -212,7 +212,7 @@ function ExtensionsPanel({ quiz, onSaved }) {
     try {
       await api(`/api/teacher/quizzes/${quiz.id}/extensions`, {
         method: 'POST',
-        body: { email: picked.email, name: picked.name || '', expiresAt: expiresAt.toISOString() },
+        body: { identifier: picked.identifier, externalId: picked.externalId || null, name: picked.name || '', expiresAt: expiresAt.toISOString() },
       });
       setEditing(false);
       onSaved();
@@ -249,7 +249,10 @@ function ExtensionsPanel({ quiz, onSaved }) {
           <tbody>
             {extensions.map((ext) => (
               <tr key={ext.id}>
-                <td>{ext.name || ext.email}{ext.name && <span className="muted"> · {ext.email}</span>}</td>
+                <td>
+                  {ext.name || ext.email || ext.identifier}
+                  {(ext.email || ext.externalId) && <span className="muted"> · {ext.email || ext.externalId}</span>}
+                </td>
                 <td>fins {formatDateTime(ext.expiresAt)}</td>
                 <td>
                   <div className="row">
@@ -285,7 +288,7 @@ function ExtensionsPanel({ quiz, onSaved }) {
           )}
           {!isPending && !isError && needsReconnect && (
             <p className="muted">
-              No s’ha pogut llegir la llista d’alumnes del Classroom; es mostren els correus dels qui tenen la tasca assignada.{' '}
+              No s’ha pogut llegir el llistat d’alumnes del Classroom; es mostren els qui tenen la tasca assignada.{' '}
               <a href="/auth/classroom">Torna a connectar Classroom</a> per veure també els noms.
             </p>
           )}
@@ -309,19 +312,19 @@ function ExtensionsPanel({ quiz, onSaved }) {
               {results.length > 0 ? (
                 <ul className="extension-picker-list" ref={listRef}>
                   {results.map((student, index) => (
-                    <li key={student.email}>
+                    <li key={student.identifier}>
                       <button
                         type="button"
-                        className={`${index === active ? 'is-active' : ''}${picked?.email === student.email ? ' is-picked' : ''}`.trim() || undefined}
-                        aria-pressed={picked?.email === student.email}
+                        className={`${index === active ? 'is-active' : ''}${picked?.identifier === student.identifier ? ' is-picked' : ''}`.trim() || undefined}
+                        aria-pressed={picked?.identifier === student.identifier}
                         onClick={() => pick(student)}
                         onMouseEnter={() => setActive(index)}
                       >
                         <span className="extension-student">
-                          <b>{student.name || student.email}</b>
-                          <small>{student.email}</small>
+                          <b>{student.name || student.email || student.identifier}</b>
+                          <small>{student.email || `ID ${student.identifier}`}</small>
                         </span>
-                        <span className="extension-tag">{withExtension.has(student.email) ? 'amb pròrroga' : '→'}</span>
+                        <span className="extension-tag">{withExtension.has(student.identifier) ? 'amb pròrroga' : '→'}</span>
                       </button>
                     </li>
                   ))}
@@ -331,7 +334,12 @@ function ExtensionsPanel({ quiz, onSaved }) {
               )}
             </>
           )}
-          {picked && <p className="muted">Termini per a <b>{picked.name || picked.email}</b>{picked.name ? ` (${picked.email})` : ''}</p>}
+          {picked && (
+            <p className="muted">
+              Termini per a <b>{picked.name || picked.email || picked.identifier}</b>
+              {(picked.email || picked.identifier) && ` (${picked.email || picked.identifier})`}
+            </p>
+          )}
           {!picked && <p className="muted">Tria un alumne per fixar la seva data; cada alumne pot tenir una pròrroga diferent.</p>}
           <div className="row">
             <label>Data <input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>

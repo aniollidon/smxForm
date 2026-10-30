@@ -767,17 +767,20 @@ router.get('/quizzes/:id/extensions', wrap(async (req, res) => {
 
 router.post('/quizzes/:id/extensions', wrap(async (req, res) => {
   const quiz = await ownQuiz(req);
+  // `identifier` és el correu si el coneixem i, si no, el userId de Classroom (`externalId`).
   const body = z.object({
-    email: z.email().max(200),
+    identifier: z.string().trim().min(1).max(200),
+    externalId: z.string().trim().max(200).nullable().optional(),
     name: z.string().max(200).default(''),
     expiresAt: z.string().datetime(),
   }).parse(req.body);
-  const email = body.email.toLowerCase();
-  const data = { name: body.name.trim(), expiresAt: new Date(body.expiresAt) };
+  const identifier = body.identifier.toLowerCase();
+  const externalId = body.externalId ? body.externalId.toLowerCase() : null;
+  const data = { externalId, name: body.name.trim(), expiresAt: new Date(body.expiresAt) };
   const extension = await prisma.quizExtension.upsert({
-    where: { quizId_email: { quizId: quiz.id, email } },
+    where: { quizId_identifier: { quizId: quiz.id, identifier } },
     update: data,
-    create: { quizId: quiz.id, email, ...data },
+    create: { quizId: quiz.id, identifier, ...data },
   });
   res.json(extension);
 }));

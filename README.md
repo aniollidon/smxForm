@@ -45,8 +45,6 @@ El professor connecta Classroom des de l'editor de l'entrega, tria el curs i es 
 
 L'exportació es fa en un procés en segon pla que el navegador consulta cada 500 ms: es veu l'alumne actual, la barra de progrés, el temps i l'estimació restant, els comptadors d'actualitzats/errors i el detall de cada alumne, i es pot cancel·lar. En tornar-ho a provar se salten els alumnes que ja tenen la nota exportada igual (llevat que s'enviïn les tasques als alumnes). Els processos viuen en memòria: amb diverses instàncies de PM2 caldria un emmagatzematge compartit.
 
-### Pròrrogues
-Al seu propi apartat de l'editor (targeta «Pròrrogues», a la secció de distribució), «+ Afegeix pròrroga» llista els alumnes que tenen la tasca assignada al Classroom —els del curs, o només els assignats si la tasca és individual— i en pots buscar per nom o correu. No cal que l'alumne hagi entrat mai a l'aplicació: la pròrroga es desa pel correu. Si no s'indica hora, acaba a les 23:59. Per a aquell alumne mana la data més tardana entre el termini de la tasca i la pròrroga, i la comprovació s'aplica en començar un intent i en enviar-lo. Una pròrroga no dona accés si la tasca no està publicada o l'alumne no la té assignada. Les pròrrogues no formen part del fitxer portable.
 
 ## Tests
 `cd server && npm test` (motor de correcció).

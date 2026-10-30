@@ -56,15 +56,16 @@ model QuizClassroom {
 
 // Pròrroga manual del termini per a un alumne concret; només pot allargar, mai escurçar.
 model QuizExtension {
-  id        Int      @id @default(autoincrement())
-  quizId    Int
-  quiz      Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
-  email     String // sempre en minúscules, com a User.email
-  name      String   @default("")
-  expiresAt DateTime
-  createdAt DateTime @default(now())
+  id         Int      @id @default(autoincrement())
+  quizId     Int
+  quiz       Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  identifier String   @map("email") // correu de l'alumne o, si el Classroom no el dona, el seu userId
+  externalId String? // userId de Classroom, per reconèixer l'alumne encara que no tinguem el correu
+  name       String   @default("")
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
 
-  @@unique([quizId, email])
+  @@unique([quizId, identifier])
 }
 
 model QuestionGroup {

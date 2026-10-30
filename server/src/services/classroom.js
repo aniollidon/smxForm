@@ -112,8 +112,30 @@ async function checkLink(c, link, extensionUntil = null) {
   return { ok: true };
 }
 
-// Alumnes matriculats al curs, amb nom i correu. Requereix el permís de rosters.
-async function rosterOf(c, courseId) {
+const foldName = (value) => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+
+// Correus que ja coneixem pels alumnes que han entrat a l'aplicació, indexats pel nom complet
+// (només quan el nom identifica un sol alumne).
+async function knownStudentEmails() {
+  const users = await prisma.user.findMany({ where: { role: 'STUDENT' }, select: { email: true, name: true } });
+  const byName = new Map();
+  const ambiguous = new Set();
+  for (const user of users) {
+    const key = foldName(user.name);
+    if (!key) continue;
+    if (byName.has(key)) {
+      ambiguous.add(key);
+      continue;
+    }
+    byName.set(key, user.email.toLowerCase());
+  }
+  for (const key of ambiguous) byName.delete(key);
+  return byName;
+}
+
+// Alumnes matriculats al curs. El Classroom sovint no retorna el correu: aleshores l'identificador
+// és el `userId` de Classroom i el correu s'agafa dels alumnes que ja han entrat a l'aplicació.
+async function rosterOf(c, courseId, byName) {
   const list = new Map();
   let skipped = 0;
   let raw = 0;
@@ -123,21 +145,22 @@ async function rosterOf(c, courseId) {
     const page = r.data.students || [];
     raw += page.length;
     for (const student of page) {
-      // `userId` és el correu en els comptes de Workspace; `profile.emailAddress` pot venir buit.
-      const email = String(student.profile?.emailAddress || student.userId || '').toLowerCase();
-      if (!email.includes('@')) {
+      const name = student.profile?.name?.fullName || '';
+      const externalId = String(student.userId || student.profile?.id || '').toLowerCase() || null;
+      const email = String(student.profile?.emailAddress || '').toLowerCase() || byName.get(foldName(name)) || '';
+      const identifier = email || externalId;
+      if (!identifier) {
         skipped++;
         continue;
       }
-      list.set(email, { email, name: student.profile?.name?.fullName || '', courseId });
+      list.set(identifier, { identifier, externalId, email, name, courseId });
     }
     pageToken = r.data.nextPageToken;
   } while (pageToken);
   return { list, skipped, raw };
 }
 
-// Cada alumne assignat a la tasca té un enviament, així que serveixen de recanvi quan no es pot
-// llegir el roster. Només donen el correu (userId), no el nom.
+// Cada alumne assignat a la tasca té un enviament: recanvi quan no es pot llegir el roster.
 async function assigneesOf(c, link) {
   const assignees = new Map();
   let pageToken;
@@ -149,8 +172,9 @@ async function assigneesOf(c, link) {
       pageToken,
     });
     for (const submission of r.data.studentSubmissions || []) {
-      const email = String(submission.userId || '').toLowerCase();
-      if (email.includes('@')) assignees.set(email, { email, name: '', courseId: link.courseId });
+      const externalId = String(submission.userId || '').toLowerCase();
+      if (!externalId) continue;
+      assignees.set(externalId, { identifier: externalId, externalId, email: '', name: '', courseId: link.courseId });
     }
     pageToken = r.data.nextPageToken;
   } while (pageToken);
@@ -182,9 +206,7 @@ async function missingRosterScope(teacherId) {
 // Assignats individualment a la tasca (null si la tasca és per a tot el curs).
 async function individualAssignees(c, link) {
   const cw = (await c.courses.courseWork.get({ courseId: link.courseId, id: link.courseWorkId })).data;
-  const ids = (cw.assignees || [])
-    .map((assignee) => String(assignee.userId || '').toLowerCase())
-    .filter((userId) => userId.includes('@'));
+  const ids = (cw.assignees || []).map((assignee) => String(assignee.userId || '').toLowerCase()).filter(Boolean);
   return cw.assigneeMode === 'INDIVIDUAL' && ids.length ? new Set(ids) : null;
 }
 
@@ -193,20 +215,30 @@ async function individualAssignees(c, link) {
 // No mira si l'alumne ha entrat mai a l'aplicació: només cal que tingui la tasca assignada.
 async function listStudents(teacherId, links) {
   const c = await classroomFor(teacherId);
+  const byName = await knownStudentEmails();
   const students = new Map();
   const courses = [];
   for (const link of links) {
     const entry = { courseId: link.courseId, courseWorkId: link.courseWorkId, ok: false, count: 0, raw: 0, skipped: 0, source: 'roster', error: null };
     try {
-      const { list: roster, skipped, raw } = await rosterOf(c, link.courseId);
+      const { list: roster, skipped, raw } = await rosterOf(c, link.courseId, byName);
       entry.skipped = skipped;
       entry.raw = raw;
       // Si la tasca és només per a alguns alumnes, el roster sencer no serveix.
       const assignees = await individualAssignees(c, link).catch(() => null);
       if (assignees) entry.source = 'assignees';
+      const byExternal = new Map([...roster.values()].map((student) => [student.externalId, student]));
       let assigned = new Map();
-      for (const [email, student] of roster) if (!assignees || assignees.has(email)) assigned.set(email, student);
-      if (assignees) for (const email of assignees) if (!assigned.has(email)) assigned.set(email, { email, name: '', courseId: link.courseId });
+      for (const [identifier, student] of roster) {
+        if (!assignees || assignees.has(student.externalId) || assignees.has(student.identifier)) assigned.set(identifier, student);
+      }
+      if (assignees) {
+        for (const userId of assignees) {
+          const known = byExternal.get(userId);
+          const student = known || { identifier: userId, externalId: userId, email: '', name: '', courseId: link.courseId };
+          assigned.set(student.identifier, student);
+        }
+      }
       // Un roster buit pot voler dir que el centre en restringeix la lectura: proven els enviaments.
       if (!assigned.size) {
         const fallback = await assigneesOf(c, link).catch(() => null);
@@ -216,7 +248,7 @@ async function listStudents(teacherId, links) {
           entry.raw = Math.max(entry.raw, fallback.size);
         }
       }
-      for (const [email, student] of assigned) if (!students.has(email)) students.set(email, student);
+      for (const [identifier, student] of assigned) if (!students.has(identifier)) students.set(identifier, student);
       entry.count = assigned.size;
       entry.ok = true;
     } catch (e) {
@@ -224,8 +256,10 @@ async function listStudents(teacherId, links) {
       try {
         const assignees = await individualAssignees(c, link).catch(() => null);
         entry.source = assignees ? 'assignees' : 'submissions';
-        const fallback = assignees || (await assigneesOf(c, link));
-        for (const email of fallback.keys()) if (!students.has(email)) students.set(email, { email, name: '', courseId: link.courseId });
+        const fallback = assignees
+          ? new Map([...assignees].map((userId) => [userId, { identifier: userId, externalId: userId, email: '', name: '', courseId: link.courseId }]))
+          : await assigneesOf(c, link);
+        for (const [identifier, student] of fallback) if (!students.has(identifier)) students.set(identifier, student);
         entry.count = fallback.size;
         entry.raw = fallback.size;
         entry.ok = true;
@@ -238,8 +272,20 @@ async function listStudents(teacherId, links) {
   if (courses.length && courses.every((course) => !course.ok)) {
     throw Object.assign(new Error(`No s’ha pogut llegir la llista d’alumnes del Classroom: ${courses[0].error}`), { status: 409 });
   }
-  const sorted = [...students.values()].sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email, 'ca', { sensitivity: 'base' }));
+  const label = (student) => student.name || student.email || student.identifier;
+  const sorted = [...students.values()].sort((a, b) => label(a).localeCompare(label(b), 'ca', { sensitivity: 'base' }));
   return { students: sorted, courses, needsReconnect: courses.some((course) => course.source === 'submissions') };
+}
+
+// Una pròrroga es reconeix pel perfil de Classroom (userId) o, si el tenim, pel correu.
+function extensionFor(extensions, email, classroomUserId) {
+  const mail = String(email || '').toLowerCase();
+  const external = String(classroomUserId || '').toLowerCase();
+  if (external) {
+    const byExternal = extensions.find((extension) => extension.externalId === external || extension.identifier === external);
+    if (byExternal) return byExternal;
+  }
+  return (mail && extensions.find((extension) => extension.identifier === mail)) || null;
 }
 
 // Retorna { ok, reason }: l'alumne ha d'estar assignat a la tasca d'algun curs vinculat i aquesta ha d'estar oberta
@@ -247,14 +293,13 @@ async function listStudents(teacherId, links) {
 async function checkStudentAccess(quiz, email) {
   const links = await prisma.quizClassroom.findMany({ where: { quizId: quiz.id } });
   if (!links.length) return { ok: true };
-  const extension = await prisma.quizExtension.findUnique({
-    where: { quizId_email: { quizId: quiz.id, email: String(email).toLowerCase() } },
-    select: { expiresAt: true },
-  });
+  const extensions = await prisma.quizExtension.findMany({ where: { quizId: quiz.id } });
   const c = await classroomFor(quiz.teacherId);
   let firstReason = null;
   for (const link of links) {
-    if (!(await studentSubmission(c, link, email))) continue;
+    const submission = await studentSubmission(c, link, email);
+    if (!submission) continue;
+    const extension = extensionFor(extensions, email, submission.userId);
     const r = await checkLink(c, link, extension?.expiresAt ?? null);
     if (r.ok) return r;
     firstReason ||= r.reason;
@@ -330,4 +375,15 @@ async function exportGrades(quizId, { returnToStudents = false, skipUnchanged = 
   return results;
 }
 
-module.exports = { authUrl, saveTokensFromCode, listCourses, listStudents, missingRosterScope, createCourseWork, checkStudentAccess, exportGrades, latestDeadline };
+module.exports = {
+  authUrl,
+  saveTokensFromCode,
+  listCourses,
+  listStudents,
+  missingRosterScope,
+  createCourseWork,
+  checkStudentAccess,
+  exportGrades,
+  latestDeadline,
+  extensionFor,
+};
