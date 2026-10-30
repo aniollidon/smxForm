@@ -13,6 +13,14 @@ import { formatGrade } from '../formatGrade.js';
 import { usePrompt } from '../components/PromptProvider.jsx';
 
 const toLocal = (iso) => (iso ? new Date(new Date(iso) - new Date(iso).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '');
+const pad = (n) => String(n).padStart(2, '0');
+const todayLocal = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+const localParts = (iso) => {
+  const d = new Date(iso);
+  return { date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, time: `${pad(d.getHours())}:${pad(d.getMinutes())}` };
+};
+const fold = (value) => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+const formatDateTime = (iso) => new Date(iso).toLocaleString('ca-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
 function Settings({ quiz, onSaved }) {
   const [f, setF] = useState(null);
@@ -73,6 +81,143 @@ function Settings({ quiz, onSaved }) {
       </div>
       {check('published', 'Publicada (l\'enllaç funciona)')}
       <div className="row"><button onClick={save}>Desa</button><span className="muted">{msg}</span></div>
+    </div>
+  );
+}
+
+function ExtensionsPanel({ quiz, onSaved }) {
+  const extensions = quiz.extensions || [];
+  const [editing, setEditing] = useState(false);
+  const [students, setStudents] = useState(null);
+  const [search, setSearch] = useState('');
+  const [picked, setPicked] = useState(null);
+  const [date, setDate] = useState('');
+  const [time, setTime] = useState('23:59');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
+  const withExtension = new Set(extensions.map((x) => x.email));
+
+  const start = async () => {
+    setEditing(true);
+    setMsg('');
+    setSearch('');
+    setPicked(null);
+    setDate(todayLocal());
+    setTime('23:59');
+    if (students) return;
+    try {
+      setStudents(await api(`/api/teacher/quizzes/${quiz.id}/classroom/students`));
+    } catch (e) {
+      setMsg(e.message);
+      setStudents([]);
+    }
+  };
+
+  const pick = (student) => {
+    setPicked(student);
+    setSearch(student.name || student.email);
+    const existing = extensions.find((x) => x.email === student.email);
+    if (existing) {
+      const parts = localParts(existing.expiresAt);
+      setDate(parts.date);
+      setTime(parts.time);
+    }
+  };
+
+  const save = async () => {
+    if (!picked) return setMsg('Tria un alumne');
+    if (!date) return setMsg('Cal una data');
+    // Sense hora, la pròrroga acaba a les 23:59 del dia triat.
+    const expiresAt = new Date(`${date}T${time || '23:59'}`);
+    if (Number.isNaN(expiresAt.getTime())) return setMsg('Data invàlida');
+    setBusy(true);
+    setMsg('');
+    try {
+      await api(`/api/teacher/quizzes/${quiz.id}/extensions`, {
+        method: 'POST',
+        body: { email: picked.email, name: picked.name || '', expiresAt: expiresAt.toISOString() },
+      });
+      setEditing(false);
+      onSaved();
+    } catch (e) {
+      setMsg(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async (ext) => {
+    setMsg('');
+    try {
+      await api(`/api/teacher/quizzes/${quiz.id}/extensions/${ext.id}`, { method: 'DELETE' });
+      onSaved();
+    } catch (e) {
+      setMsg(e.message);
+    }
+  };
+
+  const matches = students
+    ? students.filter((s) => !search.trim() || fold(s.name).includes(fold(search).trim()) || s.email.includes(fold(search).trim())).slice(0, 8)
+    : [];
+
+  return (
+    <div className="stack">
+      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+        <h4>Pròrrogues</h4>
+        {!editing && <button className="secondary" onClick={start}>+ Afegeix pròrroga</button>}
+      </div>
+      <p className="muted">
+        El termini d’un alumne amb pròrroga és el més tardà entre el de la tasca i aquesta data. La pròrroga no dona accés si la tasca no està publicada
+        o l’alumne no la té assignada.
+      </p>
+      {!editing && !extensions.length && <p className="muted">Cap alumne té pròrroga.</p>}
+      {!editing && extensions.length > 0 && (
+        <table>
+          <tbody>
+            {extensions.map((ext) => (
+              <tr key={ext.id}>
+                <td>{ext.name || ext.email}{ext.name && <span className="muted"> · {ext.email}</span>}</td>
+                <td>fins {formatDateTime(ext.expiresAt)}</td>
+                <td><button className="secondary" onClick={() => remove(ext)}>Treu</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {editing && (
+        <div className="stack">
+          <label>Alumne
+            <input type="text" value={search} placeholder="Cerca per nom o correu" onChange={(e) => { setSearch(e.target.value); setPicked(null); }} />
+          </label>
+          {students === null && <p className="muted">Carregant alumnes del Classroom…</p>}
+          {picked && <p className="muted">Alumne: {picked.name ? `${picked.name} · ${picked.email}` : picked.email}</p>}
+          {students !== null && !picked && (
+            matches.length ? (
+              <ul>
+                {matches.map((student) => (
+                  <li key={student.email}>
+                    <button className="secondary" onClick={() => pick(student)}>
+                      {student.name || student.email}{student.name ? ` · ${student.email}` : ''}
+                      {withExtension.has(student.email) ? ' (ja té pròrroga)' : ''}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="muted">Cap alumne coincideix amb la cerca.</p>
+            )
+          )}
+          <div className="row">
+            <label>Data <input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
+            <label>Hora <input type="time" value={time} placeholder="23:59" onChange={(e) => setTime(e.target.value)} /></label>
+          </div>
+          <div className="row">
+            <button disabled={busy || !picked} onClick={save}>{busy ? 'Desant…' : 'Desa la pròrroga'}</button>
+            <button className="secondary" onClick={() => { setEditing(false); setMsg(''); }}>Cancel·la</button>
+          </div>
+        </div>
+      )}
+      {msg && <p className="error">{msg}</p>}
     </div>
   );
 }
@@ -139,6 +284,7 @@ function ClassroomPanel({ quiz, onSaved }) {
               {quiz.gradingStatus?.pendingReview > 0 && <span className="muted">Revisa les respostes manuals abans d’actualitzar les notes.</span>}
             </div>
           )}
+          {quiz.classrooms?.length > 0 && <ExtensionsPanel quiz={quiz} onSaved={onSaved} />}
         </>
       )}
       {msg && <p className="error">{msg}</p>}

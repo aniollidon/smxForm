@@ -79,6 +79,16 @@ function dueDateOf(cw) {
   return new Date(Date.UTC(cw.dueDate.year, cw.dueDate.month - 1, cw.dueDate.day, t.hours ?? 23, t.minutes ?? 59));
 }
 
+// Entre el termini de la tasca i la pròrroga manual de l'alumne mana el més permissiu.
+// Sense termini a la tasca no hi ha límit, així que cap pròrroga el pot escurçar.
+function latestDeadline(due, extensionUntil) {
+  if (!due) return null;
+  if (!extensionUntil) return due;
+  const extension = new Date(extensionUntil);
+  if (Number.isNaN(extension.getTime()) || extension <= due) return due;
+  return extension;
+}
+
 async function studentSubmission(c, link, email) {
   try {
     const subs = await c.courses.courseWork.studentSubmissions.list({
@@ -92,24 +102,48 @@ async function studentSubmission(c, link, email) {
   }
 }
 
-async function checkLink(c, link) {
+async function checkLink(c, link, extensionUntil = null) {
   const cw = (await c.courses.courseWork.get({ courseId: link.courseId, id: link.courseWorkId })).data;
   if (cw.state !== 'PUBLISHED') return { ok: false, reason: 'La tasca encara no està publicada al Classroom' };
-  const due = dueDateOf(cw);
-  if (due && new Date() > due) return { ok: false, reason: 'S\'ha acabat el termini de la tasca' };
+  const until = latestDeadline(dueDateOf(cw), extensionUntil);
+  if (until && new Date() > until) return { ok: false, reason: 'S\'ha acabat el termini de la tasca' };
   if (cw.scheduledTime && new Date(cw.scheduledTime) > new Date()) return { ok: false, reason: 'La tasca encara no està disponible' };
   return { ok: true };
 }
 
+// Alumnes matriculats als cursos indicats, sense duplicats entre cursos.
+async function listStudents(teacherId, courseIds) {
+  const c = await classroomFor(teacherId);
+  const out = new Map();
+  for (const courseId of courseIds) {
+    let pageToken;
+    do {
+      const r = await c.courses.students.list({ courseId, pageSize: 100, pageToken });
+      for (const student of r.data.students || []) {
+        const email = String(student.profile?.emailAddress || '').toLowerCase();
+        if (!email || out.has(email)) continue;
+        out.set(email, { email, name: student.profile?.name?.fullName || '', courseId });
+      }
+      pageToken = r.data.nextPageToken;
+    } while (pageToken);
+  }
+  return [...out.values()].sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email));
+}
+
 // Retorna { ok, reason }: l'alumne ha d'estar assignat a la tasca d'algun curs vinculat i aquesta ha d'estar oberta
+// (o bé el professor li ha donat una pròrroga que encara no ha vençut).
 async function checkStudentAccess(quiz, email) {
   const links = await prisma.quizClassroom.findMany({ where: { quizId: quiz.id } });
   if (!links.length) return { ok: true };
+  const extension = await prisma.quizExtension.findUnique({
+    where: { quizId_email: { quizId: quiz.id, email: String(email).toLowerCase() } },
+    select: { expiresAt: true },
+  });
   const c = await classroomFor(quiz.teacherId);
   let firstReason = null;
   for (const link of links) {
     if (!(await studentSubmission(c, link, email))) continue;
-    const r = await checkLink(c, link);
+    const r = await checkLink(c, link, extension?.expiresAt ?? null);
     if (r.ok) return r;
     firstReason ||= r.reason;
   }
@@ -170,4 +204,4 @@ async function exportGrades(quizId, { returnToStudents = false } = {}) {
   return results;
 }
 
-module.exports = { authUrl, saveTokensFromCode, listCourses, createCourseWork, checkStudentAccess, exportGrades };
+module.exports = { authUrl, saveTokensFromCode, listCourses, listStudents, createCourseWork, checkStudentAccess, exportGrades, latestDeadline };

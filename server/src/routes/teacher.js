@@ -16,6 +16,8 @@ router.use(requireTeacher);
 
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 const fail = (status, msg) => Object.assign(new Error(msg), { status });
+// Cerca insensible a majúscules i accents (noms catalans).
+const fold = (value) => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
 const TYPES = ['MCQ', 'TRUE_FALSE', 'MATCHING', 'ORDERING', 'IMAGE_LABEL', 'SHORT_TEXT', 'LONG_TEXT', 'TABLE', 'IMAGE_UPLOAD', 'CALCULATED', 'DRAWING', 'FILL_BLANKS'];
 const id = z.union([z.string(), z.number()]).transform(String);
@@ -259,6 +261,7 @@ router.get('/quizzes/by-slug/:slug', wrap(async (req, res) => {
 router.get('/quizzes/:id', wrap(async (req, res) => {
   const quiz = await ownQuiz(req, {
     classrooms: true,
+    extensions: { orderBy: { expiresAt: 'asc' } },
     groups: true,
     questions: { orderBy: { order: 'asc' } },
     attempts: {
@@ -729,6 +732,44 @@ router.post('/quizzes/:id/classroom', wrap(async (req, res) => {
 router.delete('/quizzes/:id/classroom/:courseId', wrap(async (req, res) => {
   const quiz = await ownQuiz(req);
   await prisma.quizClassroom.deleteMany({ where: { quizId: quiz.id, courseId: req.params.courseId } });
+  res.json({ ok: true });
+}));
+
+// Alumnes matriculats als cursos vinculats: són els únics que poden tenir la tasca assignada.
+router.get('/quizzes/:id/classroom/students', wrap(async (req, res) => {
+  const quiz = await ownQuiz(req, { classrooms: true });
+  if (!quiz.classrooms.length) return res.json([]);
+  const students = await classroom.listStudents(quiz.teacherId, quiz.classrooms.map((link) => link.courseId));
+  const q = fold(String(req.query.q || '').slice(0, 60));
+  res.json(q ? students.filter((student) => fold(student.name).includes(q) || student.email.includes(q)) : students);
+}));
+
+router.get('/quizzes/:id/extensions', wrap(async (req, res) => {
+  const quiz = await ownQuiz(req);
+  res.json(await prisma.quizExtension.findMany({ where: { quizId: quiz.id }, orderBy: { expiresAt: 'asc' } }));
+}));
+
+router.post('/quizzes/:id/extensions', wrap(async (req, res) => {
+  const quiz = await ownQuiz(req);
+  const body = z.object({
+    email: z.email().max(200),
+    name: z.string().max(200).default(''),
+    expiresAt: z.string().datetime(),
+  }).parse(req.body);
+  const email = body.email.toLowerCase();
+  const data = { name: body.name.trim(), expiresAt: new Date(body.expiresAt) };
+  const extension = await prisma.quizExtension.upsert({
+    where: { quizId_email: { quizId: quiz.id, email } },
+    update: data,
+    create: { quizId: quiz.id, email, ...data },
+  });
+  res.json(extension);
+}));
+
+router.delete('/quizzes/:id/extensions/:eid', wrap(async (req, res) => {
+  const quiz = await ownQuiz(req);
+  const { count } = await prisma.quizExtension.deleteMany({ where: { id: Number(req.params.eid), quizId: quiz.id } });
+  if (!count) throw fail(404, 'Pròrroga no trobada');
   res.json({ ok: true });
 }));
 
