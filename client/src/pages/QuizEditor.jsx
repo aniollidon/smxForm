@@ -23,6 +23,15 @@ const localParts = (iso) => {
 };
 const fold = (value) => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 const formatDateTime = (iso) => new Date(iso).toLocaleString('ca-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+const STUDENT_SOURCES = { roster: 'llistat del curs', assignees: 'assignació de la tasca', submissions: 'enviaments de la tasca' };
+// Resum d'un curs al diagnòstic de la llista d'alumnes.
+const courseSummary = (course) => {
+  if (!course.ok) return course.error;
+  const parts = [`${course.count} alumne(s)`, STUDENT_SOURCES[course.source] || course.source];
+  if (course.raw && !course.count) parts.push(`el Classroom n’ha retornat ${course.raw}`);
+  if (course.skipped) parts.push(`${course.skipped} sense correu`);
+  return parts.join(' · ');
+};
 
 function Settings({ quiz, onSaved }) {
   const [f, setF] = useState(null);
@@ -287,8 +296,7 @@ function ExtensionsPanel({ quiz, onSaved }) {
                 <ul className="muted extension-diagnostics">
                   {courseInfo.map((course) => (
                     <li key={course.courseId}>
-                      Curs {course.courseId}:{' '}
-                      {course.ok ? `${course.count} alumne(s)` + (course.source === 'submissions' ? ' · només correus' : '') : course.error}
+                      {links.find((link) => link.courseId === course.courseId)?.courseName || `Curs ${course.courseId}`}: {courseSummary(course)}
                     </li>
                   ))}
                 </ul>

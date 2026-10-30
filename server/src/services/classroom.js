@@ -114,17 +114,26 @@ async function checkLink(c, link, extensionUntil = null) {
 
 // Alumnes matriculats al curs, amb nom i correu. Requereix el permís de rosters.
 async function rosterOf(c, courseId) {
-  const roster = new Map();
+  const list = new Map();
+  let skipped = 0;
+  let raw = 0;
   let pageToken;
   do {
     const r = await c.courses.students.list({ courseId, pageSize: 100, pageToken });
-    for (const student of r.data.students || []) {
-      const email = String(student.profile?.emailAddress || '').toLowerCase();
-      if (email) roster.set(email, { email, name: student.profile?.name?.fullName || '', courseId });
+    const page = r.data.students || [];
+    raw += page.length;
+    for (const student of page) {
+      // `userId` és el correu en els comptes de Workspace; `profile.emailAddress` pot venir buit.
+      const email = String(student.profile?.emailAddress || student.userId || '').toLowerCase();
+      if (!email.includes('@')) {
+        skipped++;
+        continue;
+      }
+      list.set(email, { email, name: student.profile?.name?.fullName || '', courseId });
     }
     pageToken = r.data.nextPageToken;
   } while (pageToken);
-  return roster;
+  return { list, skipped, raw };
 }
 
 // Cada alumne assignat a la tasca té un enviament, així que serveixen de recanvi quan no es pot
@@ -187,23 +196,28 @@ async function listStudents(teacherId, links) {
   const students = new Map();
   const courses = [];
   for (const link of links) {
-    const entry = { courseId: link.courseId, courseWorkId: link.courseWorkId, ok: false, count: 0, source: 'roster', error: null };
-    let added = 0;
-    const add = (email, name) => {
-      if (students.has(email)) return;
-      students.set(email, { email, name, courseId: link.courseId });
-      added++;
-    };
+    const entry = { courseId: link.courseId, courseWorkId: link.courseWorkId, ok: false, count: 0, raw: 0, skipped: 0, source: 'roster', error: null };
     try {
-      const roster = await rosterOf(c, link.courseId);
+      const { list: roster, skipped, raw } = await rosterOf(c, link.courseId);
+      entry.skipped = skipped;
+      entry.raw = raw;
       // Si la tasca és només per a alguns alumnes, el roster sencer no serveix.
       const assignees = await individualAssignees(c, link).catch(() => null);
       if (assignees) entry.source = 'assignees';
-      for (const [email, student] of roster) {
-        if (assignees && !assignees.has(email)) continue;
-        add(email, student.name);
+      let assigned = new Map();
+      for (const [email, student] of roster) if (!assignees || assignees.has(email)) assigned.set(email, student);
+      if (assignees) for (const email of assignees) if (!assigned.has(email)) assigned.set(email, { email, name: '', courseId: link.courseId });
+      // Un roster buit pot voler dir que el centre en restringeix la lectura: proven els enviaments.
+      if (!assigned.size) {
+        const fallback = await assigneesOf(c, link).catch(() => null);
+        if (fallback?.size) {
+          assigned = fallback;
+          entry.source = 'submissions';
+          entry.raw = Math.max(entry.raw, fallback.size);
+        }
       }
-      if (assignees) for (const email of assignees) add(email, '');
+      for (const [email, student] of assigned) if (!students.has(email)) students.set(email, student);
+      entry.count = assigned.size;
       entry.ok = true;
     } catch (e) {
       entry.error = googleError(e);
@@ -211,13 +225,14 @@ async function listStudents(teacherId, links) {
         const assignees = await individualAssignees(c, link).catch(() => null);
         entry.source = assignees ? 'assignees' : 'submissions';
         const fallback = assignees || (await assigneesOf(c, link));
-        for (const email of fallback.keys()) add(email, '');
+        for (const email of fallback.keys()) if (!students.has(email)) students.set(email, { email, name: '', courseId: link.courseId });
+        entry.count = fallback.size;
+        entry.raw = fallback.size;
         entry.ok = true;
       } catch (fallbackError) {
         entry.error = `${entry.error} · ${googleError(fallbackError)}`;
       }
     }
-    entry.count = added;
     courses.push(entry);
   }
   if (courses.length && courses.every((course) => !course.ok)) {
