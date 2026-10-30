@@ -746,17 +746,18 @@ router.delete('/quizzes/:id/classroom/:courseId', wrap(async (req, res) => {
 // Alumnes matriculats als cursos vinculats: són els únics que poden tenir la tasca assignada.
 router.get('/quizzes/:id/classroom/students', wrap(async (req, res) => {
   const quiz = await ownQuiz(req, { classrooms: true });
-  if (!quiz.classrooms.length) return res.json([]);
-  let students;
+  if (!quiz.classrooms.length) return res.json({ students: [], courses: [], needsReconnect: false });
+  let data;
   try {
-    students = await classroom.listStudents(quiz.teacherId, quiz.classrooms.map((link) => link.courseId));
+    data = await classroom.listStudents(quiz.teacherId, quiz.classrooms);
   } catch (e) {
-    // Permís de rosters no concedit (tokens anteriors a aquesta versió) o curs inaccessible.
     if (e?.code === 403 || e?.response?.status === 403) throw fail(409, 'Cal tornar a connectar Google Classroom per poder llegir la llista d’alumnes');
     throw e;
   }
   const q = fold(String(req.query.q || '').slice(0, 60));
-  res.json(q ? students.filter((student) => fold(`${student.name} ${student.email}`).includes(q)) : students);
+  const students = q ? data.students.filter((student) => fold(`${student.name} ${student.email}`).includes(q)) : data.students;
+  const needsReconnect = data.needsReconnect || (await classroom.missingRosterScope(quiz.teacherId));
+  res.json({ students, courses: data.courses, needsReconnect });
 }));
 
 router.get('/quizzes/:id/extensions', wrap(async (req, res) => {

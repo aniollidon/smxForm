@@ -112,32 +112,119 @@ async function checkLink(c, link, extensionUntil = null) {
   return { ok: true };
 }
 
-// Alumnes matriculats als cursos indicats, sense duplicats entre cursos.
-// Si un curs falla (esborrat, sense permisos) es fa servir la resta, però si fallen tots es propaga l'error.
-async function listStudents(teacherId, courseIds) {
-  const c = await classroomFor(teacherId);
-  const out = new Map();
-  let firstError = null;
-  let done = 0;
-  for (const courseId of courseIds) {
-    try {
-      let pageToken;
-      do {
-        const r = await c.courses.students.list({ courseId, pageSize: 100, pageToken });
-        for (const student of r.data.students || []) {
-          const email = String(student.profile?.emailAddress || '').toLowerCase();
-          if (!email || out.has(email)) continue;
-          out.set(email, { email, name: student.profile?.name?.fullName || '', courseId });
-        }
-        pageToken = r.data.nextPageToken;
-      } while (pageToken);
-      done++;
-    } catch (e) {
-      firstError ||= e;
+// Alumnes matriculats al curs, amb nom i correu. Requereix el permís de rosters.
+async function rosterOf(c, courseId) {
+  const roster = new Map();
+  let pageToken;
+  do {
+    const r = await c.courses.students.list({ courseId, pageSize: 100, pageToken });
+    for (const student of r.data.students || []) {
+      const email = String(student.profile?.emailAddress || '').toLowerCase();
+      if (email) roster.set(email, { email, name: student.profile?.name?.fullName || '', courseId });
     }
+    pageToken = r.data.nextPageToken;
+  } while (pageToken);
+  return roster;
+}
+
+// Cada alumne assignat a la tasca té un enviament, així que serveixen de recanvi quan no es pot
+// llegir el roster. Només donen el correu (userId), no el nom.
+async function assigneesOf(c, link) {
+  const assignees = new Map();
+  let pageToken;
+  do {
+    const r = await c.courses.courseWork.studentSubmissions.list({
+      courseId: link.courseId,
+      courseWorkId: link.courseWorkId,
+      pageSize: 100,
+      pageToken,
+    });
+    for (const submission of r.data.studentSubmissions || []) {
+      const email = String(submission.userId || '').toLowerCase();
+      if (email.includes('@')) assignees.set(email, { email, name: '', courseId: link.courseId });
+    }
+    pageToken = r.data.nextPageToken;
+  } while (pageToken);
+  return assignees;
+}
+
+function googleError(e) {
+  const status = e?.response?.status || (typeof e?.code === 'number' ? e.code : null);
+  const message = e?.response?.data?.error?.message || e?.message || 'Error de Classroom';
+  return status ? `${message} (${status})` : message;
+}
+
+async function tokenScopes(teacherId) {
+  const user = await prisma.user.findUnique({ where: { id: teacherId }, select: { googleTokens: true } });
+  if (!user?.googleTokens) return '';
+  try {
+    return String(JSON.parse(user.googleTokens).scope || '');
+  } catch {
+    return '';
   }
-  if (!done && firstError) throw firstError;
-  return [...out.values()].sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email, 'ca', { sensitivity: 'base' }));
+}
+
+// Els tokens concedits abans d'afegir el permís de rosters no el tenen: cal tornar a connectar.
+async function missingRosterScope(teacherId) {
+  const scopes = await tokenScopes(teacherId);
+  return !scopes.includes('https://www.googleapis.com/auth/classroom.rosters.readonly');
+}
+
+// Assignats individualment a la tasca (null si la tasca és per a tot el curs).
+async function individualAssignees(c, link) {
+  const cw = (await c.courses.courseWork.get({ courseId: link.courseId, id: link.courseWorkId })).data;
+  const ids = (cw.assignees || [])
+    .map((assignee) => String(assignee.userId || '').toLowerCase())
+    .filter((userId) => userId.includes('@'));
+  return cw.assigneeMode === 'INDIVIDUAL' && ids.length ? new Set(ids) : null;
+}
+
+// Alumnes dels cursos vinculats, sense duplicats entre cursos. Retorna també l'estat de cada curs
+// perquè la interfície pugui explicar per què no apareix ningú.
+// No mira si l'alumne ha entrat mai a l'aplicació: només cal que tingui la tasca assignada.
+async function listStudents(teacherId, links) {
+  const c = await classroomFor(teacherId);
+  const students = new Map();
+  const courses = [];
+  for (const link of links) {
+    const entry = { courseId: link.courseId, courseWorkId: link.courseWorkId, ok: false, count: 0, source: 'roster', error: null };
+    let added = 0;
+    const add = (email, name) => {
+      if (students.has(email)) return;
+      students.set(email, { email, name, courseId: link.courseId });
+      added++;
+    };
+    try {
+      const roster = await rosterOf(c, link.courseId);
+      // Si la tasca és només per a alguns alumnes, el roster sencer no serveix.
+      const assignees = await individualAssignees(c, link).catch(() => null);
+      if (assignees) entry.source = 'assignees';
+      for (const [email, student] of roster) {
+        if (assignees && !assignees.has(email)) continue;
+        add(email, student.name);
+      }
+      if (assignees) for (const email of assignees) add(email, '');
+      entry.ok = true;
+    } catch (e) {
+      entry.error = googleError(e);
+      try {
+        const assignees = await individualAssignees(c, link).catch(() => null);
+        entry.source = assignees ? 'assignees' : 'submissions';
+        const fallback = assignees || (await assigneesOf(c, link));
+        for (const email of fallback.keys()) add(email, '');
+        entry.ok = true;
+      } catch (fallbackError) {
+        entry.error = `${entry.error} · ${googleError(fallbackError)}`;
+      }
+    }
+    entry.count = added;
+    courses.push(entry);
+  }
+  if (courses.length && courses.every((course) => !course.ok)) {
+    throw Object.assign(new Error(`No s’ha pogut llegir la llista d’alumnes del Classroom: ${courses[0].error}`), { status: 409 });
+  }
+  const sorted = [...students.values()].sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email, 'ca', { sensitivity: 'base' }));
+  return { students: sorted, courses, needsReconnect: courses.some((course) => course.source === 'submissions') };
 }
 
 // Retorna { ok, reason }: l'alumne ha d'estar assignat a la tasca d'algun curs vinculat i aquesta ha d'estar oberta
@@ -228,4 +315,4 @@ async function exportGrades(quizId, { returnToStudents = false, skipUnchanged = 
   return results;
 }
 
-module.exports = { authUrl, saveTokensFromCode, listCourses, listStudents, createCourseWork, checkStudentAccess, exportGrades, latestDeadline };
+module.exports = { authUrl, saveTokensFromCode, listCourses, listStudents, missingRosterScope, createCourseWork, checkStudentAccess, exportGrades, latestDeadline };

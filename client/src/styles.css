@@ -1205,7 +1205,7 @@ html[data-a11y] .modal button.secondary { border-color: var(--line); background:
 }
 
 /* Pròrrogues: selector d'alumnes del Classroom */
-.extension-heading h4 { margin: 0; color: var(--surface-ink); }
+.extension-diagnostics { margin: 0; padding-left: 18px; font-size: 12px; }
 .extension-count { margin: 0; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }
 .extension-picker-list { margin: 0; padding: 0; max-height: 264px; overflow-y: auto; border: 1px solid #383838; border-radius: 3px; background: #262626; list-style: none; }
 .extension-picker-list li + li { border-top: 1px solid #333; }

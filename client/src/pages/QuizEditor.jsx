@@ -89,6 +89,7 @@ function Settings({ quiz, onSaved }) {
 
 function ExtensionsPanel({ quiz, onSaved }) {
   const extensions = quiz.extensions || [];
+  const links = quiz.classrooms || [];
   const [editing, setEditing] = useState(false);
   const [search, setSearch] = useState('');
   const [picked, setPicked] = useState(null);
@@ -101,15 +102,17 @@ function ExtensionsPanel({ quiz, onSaved }) {
   const listRef = useRef(null);
   const withExtension = new Set(extensions.map((x) => x.email));
 
-  // Es torna a demanar el llistat per a cada entrega: depèn dels cursos vinculats.
-  const { data: students, isPending, isError, error, isFetching, refetch } = useQuery({
-    queryKey: ['classroom-students', quiz.id],
+  // Es torna a demanar el llistat per a cada entrega i cada conjunt de cursos vinculats.
+  const { data, isPending, isError, error, isFetching, refetch } = useQuery({
+    queryKey: ['classroom-students', quiz.id, links.map((link) => link.courseId).sort().join(',')],
     queryFn: () => api(`/api/teacher/quizzes/${quiz.id}/classroom/students`),
-    enabled: editing,
-    staleTime: 60_000,
+    enabled: editing && links.length > 0,
+    staleTime: 30_000,
     retry: false,
   });
-  const roster = useMemo(() => students || [], [students]);
+  const roster = useMemo(() => data?.students || [], [data]);
+  const courseInfo = useMemo(() => data?.courses || [], [data]);
+  const needsReconnect = !!data?.needsReconnect;
 
   const results = useMemo(() => {
     const terms = fold(search).trim().split(/\s+/).filter(Boolean);
@@ -155,7 +158,22 @@ function ExtensionsPanel({ quiz, onSaved }) {
       const parts = localParts(existing.expiresAt);
       setDate(parts.date);
       setTime(parts.time);
+    } else {
+      // Cada alumne té la seva pròpia data: no s'hereta la de l'alumne anterior.
+      setDate(todayLocal());
+      setTime('23:59');
     }
+  };
+
+  // Modifica la pròrroga d'un alumne ja afegit, amb la seva data precarregada.
+  const edit = (ext) => {
+    setEditing(true);
+    setMsg('');
+    setSearch('');
+    setPicked({ email: ext.email, name: ext.name });
+    const parts = localParts(ext.expiresAt);
+    setDate(parts.date);
+    setTime(parts.time);
   };
 
   const onSearchKeyDown = (event) => {
@@ -208,14 +226,14 @@ function ExtensionsPanel({ quiz, onSaved }) {
 
   return (
     <div className="stack">
-      <div className="row between extension-heading">
-        <h4>Pròrrogues</h4>
-        {!editing && <button className="secondary" onClick={start}>+ Afegeix pròrroga</button>}
-      </div>
       <p className="muted">
         El termini d’un alumne amb pròrroga és el més tardà entre el de la tasca i aquesta data. La pròrroga no dona accés si la tasca no està publicada
-        o l’alumne no la té assignada.
+        o l’alumne no la té assignada. No cal que l’alumne hagi entrat mai a l’aplicació.
       </p>
+      {!links.length && <p className="muted">Vincula l’entrega a una tasca de Classroom per poder afegir pròrrogues.</p>}
+      {links.length > 0 && !editing && (
+        <div className="row"><button className="secondary" onClick={start}>+ Afegeix pròrroga</button></div>
+      )}
       {!editing && !extensions.length && <p className="muted">Cap alumne té pròrroga.</p>}
       {!editing && extensions.length > 0 && (
         <table>
@@ -224,7 +242,12 @@ function ExtensionsPanel({ quiz, onSaved }) {
               <tr key={ext.id}>
                 <td>{ext.name || ext.email}{ext.name && <span className="muted"> · {ext.email}</span>}</td>
                 <td>fins {formatDateTime(ext.expiresAt)}</td>
-                <td><button className="secondary" onClick={() => remove(ext)}>Treu</button></td>
+                <td>
+                  <div className="row">
+                    <button className="secondary" onClick={() => edit(ext)}>Modifica</button>
+                    <button className="secondary" onClick={() => remove(ext)}>Treu</button>
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -251,7 +274,27 @@ function ExtensionsPanel({ quiz, onSaved }) {
               <button type="button" className="secondary" onClick={() => refetch()}>{isFetching ? 'Provant…' : 'Torna-ho a provar'}</button>
             </p>
           )}
-          {!isPending && !isError && !roster.length && <p className="muted">No s’ha trobat cap alumne als cursos vinculats.</p>}
+          {!isPending && !isError && needsReconnect && (
+            <p className="muted">
+              No s’ha pogut llegir la llista d’alumnes del Classroom; es mostren els correus dels qui tenen la tasca assignada.{' '}
+              <a href="/auth/classroom">Torna a connectar Classroom</a> per veure també els noms.
+            </p>
+          )}
+          {!isPending && !isError && (roster.length === 0 || courseInfo.some((course) => course.error)) && (
+            <div className="stack">
+              {roster.length === 0 && <p className="muted">No s’ha trobat cap alumne amb la tasca assignada.</p>}
+              {courseInfo.length > 0 && (
+                <ul className="muted extension-diagnostics">
+                  {courseInfo.map((course) => (
+                    <li key={course.courseId}>
+                      Curs {course.courseId}:{' '}
+                      {course.ok ? `${course.count} alumne(s)` + (course.source === 'submissions' ? ' · només correus' : '') : course.error}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
           {!isPending && !isError && roster.length > 0 && (
             <>
               <p className="muted extension-count">{results.length} de {roster.length} alumnes</p>
@@ -281,6 +324,7 @@ function ExtensionsPanel({ quiz, onSaved }) {
             </>
           )}
           {picked && <p className="muted">Termini per a <b>{picked.name || picked.email}</b>{picked.name ? ` (${picked.email})` : ''}</p>}
+          {!picked && <p className="muted">Tria un alumne per fixar la seva data; cada alumne pot tenir una pròrroga diferent.</p>}
           <div className="row">
             <label>Data <input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
             <label>Hora <input type="time" value={time} placeholder="23:59" onChange={(e) => setTime(e.target.value)} /></label>
@@ -360,7 +404,6 @@ function ClassroomPanel({ quiz, onSaved }) {
               {quiz.gradingStatus?.pendingReview > 0 && <span className="muted">Revisa les respostes manuals abans d’actualitzar les notes.</span>}
             </div>
           )}
-          {quiz.classrooms?.length > 0 && <ExtensionsPanel quiz={quiz} onSaved={onSaved} />}
         </>
       )}
       {msg && <p className="error">{msg}</p>}
@@ -724,6 +767,10 @@ export default function QuizEditor() {
           )}
         </div>
         <ClassroomPanel quiz={quiz} onSaved={refresh} />
+        <div className="card stack">
+          <h3>Pròrrogues</h3>
+          <ExtensionsPanel quiz={quiz} onSaved={refresh} />
+        </div>
       </section>
     </div>
   );
