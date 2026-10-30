@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
@@ -8,6 +8,8 @@ import { toPayload } from '../questionModel.js';
 import WorkspaceHero from '../components/WorkspaceHero.jsx';
 import FormatMenu from '../components/FormatMenu.jsx';
 import { usePrompt } from '../components/PromptProvider.jsx';
+import ExportProgressDialog from '../components/ExportProgressDialog.jsx';
+import { useExportJob } from '../useExportJob.js';
 
 export default function TeacherHome() {
   const { confirm } = usePrompt();
@@ -21,6 +23,19 @@ export default function TeacherHome() {
   const importInput = useRef(null);
   const { data, isLoading } = useQuery({ queryKey: ['quizzes'], queryFn: () => api('/api/teacher/quizzes') });
   const refresh = () => qc.invalidateQueries({ queryKey: ['quizzes'] });
+  const onExportFinished = useCallback((job) => {
+    const results = job.results || [];
+    const updated = results.filter((row) => row.ok && !row.skipped).length;
+    const skipped = results.filter((row) => row.skipped).length;
+    const failed = results.filter((row) => !row.ok).length;
+    let text;
+    if (job.state === 'error') text = job.error || 'No s’han pogut exportar les notes.';
+    else if (job.state === 'cancelled') text = `Exportació cancel·lada: ${updated} notes actualitzades${failed ? `; ${failed} errors` : ''}.`;
+    else text = `${updated} notes actualitzades a Classroom${skipped ? `; ${skipped} ja estaven al dia` : ''}${failed ? `; ${failed} errors` : ''}.`;
+    setGradeMessage((messages) => ({ ...messages, [job.quizId]: { text, error: job.state === 'error' || failed > 0 } }));
+    qc.invalidateQueries({ queryKey: ['quizzes'] });
+  }, [qc]);
+  const exportJob = useExportJob({ onFinished: onExportFinished });
   const create = useMutation({
     mutationFn: () => api('/api/teacher/quizzes', { method: 'POST', body: { title } }),
     onSuccess: (q) => nav(`/t/quiz/${q.id}`),
@@ -29,18 +44,16 @@ export default function TeacherHome() {
   const del = useMutation({ mutationFn: (id) => api(`/api/teacher/quizzes/${id}`, { method: 'DELETE' }), onSuccess: refresh });
 
   const runGradeAction = async (quiz, action) => {
-    setGradeAction({ id: quiz.id, action });
     setGradeMessage((messages) => ({ ...messages, [quiz.id]: '' }));
+    if (action === 'classroom') {
+      // L'exportació va en segon pla amb progrés: el resultat arriba a onExportFinished.
+      await exportJob.start(quiz.id, { returnToStudents: false });
+      return;
+    }
+    setGradeAction({ id: quiz.id, action });
     try {
-      if (action === 'regrade') {
-        const result = await api(`/api/teacher/quizzes/${quiz.id}/regrade`, { method: 'POST' });
-        setGradeMessage((messages) => ({ ...messages, [quiz.id]: { text: `${result.regraded} intents reavaluats; ${result.pendingReview} pendents de revisió manual.` } }));
-      } else {
-        const result = await api(`/api/teacher/quizzes/${quiz.id}/export`, { method: 'POST', body: { returnToStudents: false } });
-        const succeeded = result.filter((row) => row.ok).length;
-        const failed = result.filter((row) => !row.ok).length;
-        setGradeMessage((messages) => ({ ...messages, [quiz.id]: { text: `${succeeded} notes actualitzades a Classroom${failed ? `; ${failed} errors` : ''}.`, error: failed > 0 } }));
-      }
+      const result = await api(`/api/teacher/quizzes/${quiz.id}/regrade`, { method: 'POST' });
+      setGradeMessage((messages) => ({ ...messages, [quiz.id]: { text: `${result.regraded} intents reavaluats; ${result.pendingReview} pendents de revisió manual.` } }));
       refresh();
     } catch (error) {
       setGradeMessage((messages) => ({ ...messages, [quiz.id]: { text: error.message, error: true } }));
@@ -130,13 +143,24 @@ export default function TeacherHome() {
           </div>
           <div className="row">
             <Link to={`/t/quiz/${q.id}/attempts`}>Intents</Link>
-            {q.gradingStatus?.needsRegrade > 0 && <button disabled={gradeAction?.id === q.id} onClick={() => runGradeAction(q, 'regrade')}>{gradeAction?.id === q.id && gradeAction.action === 'regrade' ? 'Reavaluant…' : 'Reavalua intents'}</button>}
-            {q.gradingStatus?.classroomUpdates > 0 && q.classrooms?.length > 0 && <button className="secondary" disabled={gradeAction?.id === q.id || q.gradingStatus?.needsRegrade > 0 || q.gradingStatus?.pendingReview > 0} onClick={() => runGradeAction(q, 'classroom')}>{gradeAction?.id === q.id && gradeAction.action === 'classroom' ? 'Actualitzant…' : 'Actualitza Classroom'}</button>}
+            {q.gradingStatus?.needsRegrade > 0 && <button disabled={gradeAction?.id === q.id || (exportJob.running && exportJob.quizId === q.id)} onClick={() => runGradeAction(q, 'regrade')}>{gradeAction?.id === q.id && gradeAction.action === 'regrade' ? 'Reavaluant…' : 'Reavalua intents'}</button>}
+            {q.gradingStatus?.classroomUpdates > 0 && q.classrooms?.length > 0 && <button className="secondary" disabled={(exportJob.running && exportJob.quizId === q.id) || gradeAction?.id === q.id || q.gradingStatus?.needsRegrade > 0 || q.gradingStatus?.pendingReview > 0} onClick={() => runGradeAction(q, 'classroom')}>{exportJob.running && exportJob.quizId === q.id ? `Exportant… ${exportJob.progress.done}/${exportJob.progress.total || '?'}` : 'Actualitza Classroom'}</button>}
             <button className="secondary" onClick={() => dup.mutate(q.id)}>Duplica</button>
-            <button className="danger" onClick={() => deleteQuiz(q)}>Esborra</button>
+            <button className="danger" disabled={exportJob.running && exportJob.quizId === q.id} onClick={() => deleteQuiz(q)}>Esborra</button>
           </div>
         </div>
       ))}
+      <ExportProgressDialog
+        open={exportJob.open}
+        state={exportJob.state}
+        job={exportJob.job}
+        progress={exportJob.progress}
+        error={exportJob.error}
+        quizTitle={data?.find((quiz) => quiz.id === exportJob.quizId)?.title}
+        onCancel={exportJob.cancel}
+        onClose={exportJob.close}
+        onRetry={exportJob.retry}
+      />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, fileUrl, upload } from '../api';
@@ -11,6 +11,8 @@ import { toEditorEntries, toLayoutItems } from '../layout.js';
 import { toPayload } from '../questionModel.js';
 import { formatGrade } from '../formatGrade.js';
 import { usePrompt } from '../components/PromptProvider.jsx';
+import ExportProgressDialog from '../components/ExportProgressDialog.jsx';
+import { useExportJob } from '../useExportJob.js';
 
 const toLocal = (iso) => (iso ? new Date(new Date(iso) - new Date(iso).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '');
 const pad = (n) => String(n).padStart(2, '0');
@@ -88,39 +90,87 @@ function Settings({ quiz, onSaved }) {
 function ExtensionsPanel({ quiz, onSaved }) {
   const extensions = quiz.extensions || [];
   const [editing, setEditing] = useState(false);
-  const [students, setStudents] = useState(null);
   const [search, setSearch] = useState('');
   const [picked, setPicked] = useState(null);
+  const [active, setActive] = useState(0);
   const [date, setDate] = useState('');
   const [time, setTime] = useState('23:59');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
+  const searchRef = useRef(null);
+  const listRef = useRef(null);
   const withExtension = new Set(extensions.map((x) => x.email));
 
-  const start = async () => {
+  // Es torna a demanar el llistat per a cada entrega: depèn dels cursos vinculats.
+  const { data: students, isPending, isError, error, isFetching, refetch } = useQuery({
+    queryKey: ['classroom-students', quiz.id],
+    queryFn: () => api(`/api/teacher/quizzes/${quiz.id}/classroom/students`),
+    enabled: editing,
+    staleTime: 60_000,
+    retry: false,
+  });
+  const roster = useMemo(() => students || [], [students]);
+
+  const results = useMemo(() => {
+    const terms = fold(search).trim().split(/\s+/).filter(Boolean);
+    if (!terms.length) return roster;
+    return roster.filter((student) => {
+      const haystack = fold(`${student.name || ''} ${student.email}`);
+      return terms.every((term) => haystack.includes(term));
+    });
+  }, [roster, search]);
+
+  useEffect(() => {
+    if (editing) searchRef.current?.focus();
+  }, [editing]);
+  useEffect(() => {
+    setActive(0);
+  }, [search]);
+  useEffect(() => {
+    const row = listRef.current?.children[active];
+    if (row) row.scrollIntoView({ block: 'nearest' });
+  }, [active, editing, results.length]);
+
+  const start = () => {
     setEditing(true);
     setMsg('');
     setSearch('');
     setPicked(null);
     setDate(todayLocal());
     setTime('23:59');
-    if (students) return;
-    try {
-      setStudents(await api(`/api/teacher/quizzes/${quiz.id}/classroom/students`));
-    } catch (e) {
-      setMsg(e.message);
-      setStudents([]);
-    }
+  };
+
+  const cancel = () => {
+    setEditing(false);
+    setMsg('');
+    setSearch('');
+    setPicked(null);
   };
 
   const pick = (student) => {
+    if (!student) return;
     setPicked(student);
-    setSearch(student.name || student.email);
     const existing = extensions.find((x) => x.email === student.email);
     if (existing) {
       const parts = localParts(existing.expiresAt);
       setDate(parts.date);
       setTime(parts.time);
+    }
+  };
+
+  const onSearchKeyDown = (event) => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (!results.length) return;
+      setActive((i) => (event.key === 'ArrowDown' ? Math.min(i + 1, results.length - 1) : Math.max(i - 1, 0)));
+    } else if (event.key === 'Enter') {
+      if (results[active]) {
+        event.preventDefault();
+        pick(results[active]);
+      }
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      cancel();
     }
   };
 
@@ -156,13 +206,9 @@ function ExtensionsPanel({ quiz, onSaved }) {
     }
   };
 
-  const matches = students
-    ? students.filter((s) => !search.trim() || fold(s.name).includes(fold(search).trim()) || s.email.includes(fold(search).trim())).slice(0, 8)
-    : [];
-
   return (
     <div className="stack">
-      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="row between extension-heading">
         <h4>Pròrrogues</h4>
         {!editing && <button className="secondary" onClick={start}>+ Afegeix pròrroga</button>}
       </div>
@@ -185,35 +231,63 @@ function ExtensionsPanel({ quiz, onSaved }) {
         </table>
       )}
       {editing && (
-        <div className="stack">
-          <label>Alumne
-            <input type="text" value={search} placeholder="Cerca per nom o correu" onChange={(e) => { setSearch(e.target.value); setPicked(null); }} />
+        <div className="stack extension-editor">
+          <label>
+            <span className="visually-hidden">Cerca alumnes del Classroom</span>
+            <input
+              ref={searchRef}
+              type="search"
+              autoComplete="off"
+              placeholder="Cerca per nom o correu"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={onSearchKeyDown}
+            />
           </label>
-          {students === null && <p className="muted">Carregant alumnes del Classroom…</p>}
-          {picked && <p className="muted">Alumne: {picked.name ? `${picked.name} · ${picked.email}` : picked.email}</p>}
-          {students !== null && !picked && (
-            matches.length ? (
-              <ul>
-                {matches.map((student) => (
-                  <li key={student.email}>
-                    <button className="secondary" onClick={() => pick(student)}>
-                      {student.name || student.email}{student.name ? ` · ${student.email}` : ''}
-                      {withExtension.has(student.email) ? ' (ja té pròrroga)' : ''}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="muted">Cap alumne coincideix amb la cerca.</p>
-            )
+          {isPending && <p className="muted">Carregant alumnes del Classroom…</p>}
+          {isError && (
+            <p className="error">
+              {error.message}{' '}
+              <button type="button" className="secondary" onClick={() => refetch()}>{isFetching ? 'Provant…' : 'Torna-ho a provar'}</button>
+            </p>
           )}
+          {!isPending && !isError && !roster.length && <p className="muted">No s’ha trobat cap alumne als cursos vinculats.</p>}
+          {!isPending && !isError && roster.length > 0 && (
+            <>
+              <p className="muted extension-count">{results.length} de {roster.length} alumnes</p>
+              {results.length > 0 ? (
+                <ul className="extension-picker-list" ref={listRef}>
+                  {results.map((student, index) => (
+                    <li key={student.email}>
+                      <button
+                        type="button"
+                        className={`${index === active ? 'is-active' : ''}${picked?.email === student.email ? ' is-picked' : ''}`.trim() || undefined}
+                        aria-pressed={picked?.email === student.email}
+                        onClick={() => pick(student)}
+                        onMouseEnter={() => setActive(index)}
+                      >
+                        <span className="extension-student">
+                          <b>{student.name || student.email}</b>
+                          <small>{student.email}</small>
+                        </span>
+                        <span className="extension-tag">{withExtension.has(student.email) ? 'amb pròrroga' : '→'}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="muted">Cap alumne coincideix amb «{search.trim()}».</p>
+              )}
+            </>
+          )}
+          {picked && <p className="muted">Termini per a <b>{picked.name || picked.email}</b>{picked.name ? ` (${picked.email})` : ''}</p>}
           <div className="row">
             <label>Data <input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
             <label>Hora <input type="time" value={time} placeholder="23:59" onChange={(e) => setTime(e.target.value)} /></label>
           </div>
           <div className="row">
             <button disabled={busy || !picked} onClick={save}>{busy ? 'Desant…' : 'Desa la pròrroga'}</button>
-            <button className="secondary" onClick={() => { setEditing(false); setMsg(''); }}>Cancel·la</button>
+            <button className="secondary" onClick={cancel}>Cancel·la</button>
           </div>
         </div>
       )}
@@ -227,8 +301,8 @@ function ClassroomPanel({ quiz, onSaved }) {
   const [courses, setCourses] = useState(null);
   const [course, setCourse] = useState('');
   const [msg, setMsg] = useState('');
-  const [results, setResults] = useState(null);
   const [ret, setRet] = useState(false);
+  const exportJob = useExportJob({ onFinished: onSaved });
   const run = async (fn) => {
     setMsg('');
     try { await fn(); } catch (e) { setMsg(e.message); }
@@ -277,8 +351,10 @@ function ClassroomPanel({ quiz, onSaved }) {
           {quiz.classrooms?.length > 0 && (
             <div className="row">
               <label><input type="checkbox" checked={ret} onChange={(e) => setRet(e.target.checked)} /> Retorna les tasques als alumnes</label>
-              <button disabled={quiz.gradingStatus?.needsRegrade > 0 || quiz.gradingStatus?.pendingReview > 0} onClick={() => run(async () => setResults(await api(`/api/teacher/quizzes/${quiz.id}/export`, { method: 'POST', body: { returnToStudents: ret } })))}>
-                {quiz.gradingStatus?.classroomUpdates > 0 ? 'Actualitza notes a Classroom' : 'Exporta notes'}
+              <button disabled={quiz.gradingStatus?.needsRegrade > 0 || quiz.gradingStatus?.pendingReview > 0 || exportJob.running} onClick={() => exportJob.start(quiz.id, { returnToStudents: ret })}>
+                {exportJob.running
+                  ? `Exportant… ${exportJob.progress.done}/${exportJob.progress.total || '?'}`
+                  : quiz.gradingStatus?.classroomUpdates > 0 ? 'Actualitza notes a Classroom' : 'Exporta notes'}
               </button>
               {quiz.gradingStatus?.needsRegrade > 0 && <span className="muted">Reavalua els intents abans d’exportar les notes.</span>}
               {quiz.gradingStatus?.pendingReview > 0 && <span className="muted">Revisa les respostes manuals abans d’actualitzar les notes.</span>}
@@ -288,13 +364,30 @@ function ClassroomPanel({ quiz, onSaved }) {
         </>
       )}
       {msg && <p className="error">{msg}</p>}
-      {results && (
+      {exportJob.job?.results && (
         <table>
           <tbody>
-            {results.map((r) => <tr key={r.email}><td>{r.email}</td><td>{formatGrade(r.score)}</td><td className={r.ok ? 'ok' : 'error'}>{r.ok ? 'OK' : r.error}</td></tr>)}
+            {exportJob.job.results.map((r) => (
+              <tr key={r.email}>
+                <td>{r.email}</td>
+                <td>{formatGrade(r.score)}</td>
+                <td className={r.ok ? 'ok' : 'error'}>{r.skipped ? 'Ja al dia' : r.ok ? 'OK' : r.error}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
       )}
+      <ExportProgressDialog
+        open={exportJob.open}
+        state={exportJob.state}
+        job={exportJob.job}
+        progress={exportJob.progress}
+        error={exportJob.error}
+        quizTitle={quiz.title}
+        onCancel={exportJob.cancel}
+        onClose={exportJob.close}
+        onRetry={exportJob.retry}
+      />
     </div>
   );
 }

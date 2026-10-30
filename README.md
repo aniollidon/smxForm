@@ -43,6 +43,8 @@ Qui entra amb @inspalamos.cat i no és professor és alumne.
 ## Classroom
 El professor connecta Classroom des de l'editor de l'entrega, tria el curs i es crea una tasca (esborrany) amb el mateix nom i l'enllaç al quiz. Cal publicar-la al Classroom: l'accés a l'enllaç només es permet als alumnes amb la tasca assignada i mentre sigui publicada i dins del termini. «Exporta notes» envia la nota (millor o última) a cada alumne.
 
+L'exportació es fa en un procés en segon pla que el navegador consulta cada 500 ms: es veu l'alumne actual, la barra de progrés, el temps i l'estimació restant, els comptadors d'actualitzats/errors i el detall de cada alumne, i es pot cancel·lar. En tornar-ho a provar se salten els alumnes que ja tenen la nota exportada igual (llevat que s'enviïn les tasques als alumnes). Els processos viuen en memòria: amb diverses instàncies de PM2 caldria un emmagatzematge compartit.
+
 ### Pròrrogues
 A l'apartat Google Classroom de l'editor, «+ Afegeix pròrroga» cerca un alumne dels cursos vinculats (per nom o correu) i fixa una data; si no s'indica hora, acaba a les 23:59. Per a aquell alumne mana la data més tardana entre el termini de la tasca i la pròrroga, i la comprovació s'aplica en començar un intent i en enviar-lo. Una pròrroga no dona accés si la tasca no està publicada o l'alumne no la té assignada. Les pròrrogues no formen part del fitxer portable.
 

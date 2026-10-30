@@ -1,5 +1,6 @@
 const { google } = require('googleapis');
 const prisma = require('../db');
+const { pickExportTargets } = require('./exportPlan');
 
 const CLASSROOM_SCOPES = [
   'https://www.googleapis.com/auth/classroom.courses.readonly',
@@ -112,22 +113,31 @@ async function checkLink(c, link, extensionUntil = null) {
 }
 
 // Alumnes matriculats als cursos indicats, sense duplicats entre cursos.
+// Si un curs falla (esborrat, sense permisos) es fa servir la resta, però si fallen tots es propaga l'error.
 async function listStudents(teacherId, courseIds) {
   const c = await classroomFor(teacherId);
   const out = new Map();
+  let firstError = null;
+  let done = 0;
   for (const courseId of courseIds) {
-    let pageToken;
-    do {
-      const r = await c.courses.students.list({ courseId, pageSize: 100, pageToken });
-      for (const student of r.data.students || []) {
-        const email = String(student.profile?.emailAddress || '').toLowerCase();
-        if (!email || out.has(email)) continue;
-        out.set(email, { email, name: student.profile?.name?.fullName || '', courseId });
-      }
-      pageToken = r.data.nextPageToken;
-    } while (pageToken);
+    try {
+      let pageToken;
+      do {
+        const r = await c.courses.students.list({ courseId, pageSize: 100, pageToken });
+        for (const student of r.data.students || []) {
+          const email = String(student.profile?.emailAddress || '').toLowerCase();
+          if (!email || out.has(email)) continue;
+          out.set(email, { email, name: student.profile?.name?.fullName || '', courseId });
+        }
+        pageToken = r.data.nextPageToken;
+      } while (pageToken);
+      done++;
+    } catch (e) {
+      firstError ||= e;
+    }
   }
-  return [...out.values()].sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email));
+  if (!done && firstError) throw firstError;
+  return [...out.values()].sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email, 'ca', { sensitivity: 'base' }));
 }
 
 // Retorna { ok, reason }: l'alumne ha d'estar assignat a la tasca d'algun curs vinculat i aquesta ha d'estar oberta
@@ -150,8 +160,9 @@ async function checkStudentAccess(quiz, email) {
   return { ok: false, reason: firstReason || 'No tens aquesta tasca assignada' };
 }
 
-// Exporta nota (millor o última) de cada alumne al curs o cursos on és
-async function exportGrades(quizId, { returnToStudents = false } = {}) {
+// Exporta nota (millor o última) de cada alumne al curs o cursos on és.
+// `onEvent` rep l'inici i el resultat de cada alumne; `shouldStop` permet cancel·lar entre alumnes.
+async function exportGrades(quizId, { returnToStudents = false, skipUnchanged = false, onEvent = () => {}, shouldStop = () => false } = {}) {
   const quiz = await prisma.quiz.findUnique({ where: { id: quizId } });
   const links = await prisma.quizClassroom.findMany({ where: { quizId } });
   if (!links.length) {
@@ -164,14 +175,25 @@ async function exportGrades(quizId, { returnToStudents = false } = {}) {
     include: { user: true },
     orderBy: { submittedAt: 'asc' },
   });
-  const byUser = new Map();
-  for (const a of attempts) {
-    const cur = byUser.get(a.userId);
-    if (!cur || quiz.gradeToExport === 'LAST' || a.score > cur.score) byUser.set(a.userId, a);
-  }
+  // Reprendre només té sentit si no s'han de retornar les tasques: retornar no es pot detectar a la BD.
+  const targets = pickExportTargets(quiz, attempts, { skipUnchanged: skipUnchanged && !returnToStudents });
+  const total = targets.length;
+  onEvent({ type: 'start', total, skipped: targets.filter((t) => t.skip).length, courses: links.length, courseNames: links.map((l) => l.courseName || l.courseId) });
   const c = await classroomFor(quiz.teacherId);
   const results = [];
-  for (const a of byUser.values()) {
+  for (const [index, { attempt: a, skip }] of targets.entries()) {
+    if (shouldStop()) {
+      onEvent({ type: 'stopped', index, total });
+      break;
+    }
+    const name = a.user.name || '';
+    if (skip) {
+      results.push({ email: a.user.email, name, score: a.score, ok: true, skipped: true });
+      onEvent({ type: 'studentDone', index: index + 1, total, email: a.user.email, name, score: a.score, ok: true, skipped: true, ms: 0 });
+      continue;
+    }
+    onEvent({ type: 'student', index: index + 1, total, email: a.user.email, name });
+    const startedAt = Date.now();
     try {
       let exported = 0;
       for (const link of links) {
@@ -196,9 +218,11 @@ async function exportGrades(quizId, { returnToStudents = false } = {}) {
       }
       if (!exported) throw new Error('Sense submission');
       await prisma.attempt.update({ where: { id: a.id }, data: { exportedAt: new Date(), exportedScore: a.score } });
-      results.push({ email: a.user.email, score: a.score, ok: true });
+      results.push({ email: a.user.email, name, score: a.score, ok: true });
+      onEvent({ type: 'studentDone', index: index + 1, total, email: a.user.email, name, score: a.score, ok: true, ms: Date.now() - startedAt });
     } catch (e) {
-      results.push({ email: a.user.email, score: a.score, ok: false, error: e.message });
+      results.push({ email: a.user.email, name, score: a.score, ok: false, error: e.message });
+      onEvent({ type: 'studentDone', index: index + 1, total, email: a.user.email, name, score: a.score, ok: false, error: e.message, ms: Date.now() - startedAt });
     }
   }
   return results;

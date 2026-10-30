@@ -7,6 +7,7 @@ const { computeAttemptScore } = require('../grading');
 const { countBlanks } = require('../grading/blanks');
 const { regradeAttempt, getGradingStatus } = require('../grading/regrade');
 const { evaluateAnswers, llmOptions } = require('../services/llm');
+const exportJobs = require('../services/exportJobs');
 const { validateDefinition, personalize, parseAnswer } = require('../grading/calculated');
 const { requireTeacher } = require('../auth');
 const { describeAnswer } = require('../services/linkedAnswer');
@@ -179,6 +180,13 @@ async function gradingStatusFor(quiz) {
     select: { userId: true, status: true, score: true, submittedAt: true, gradedVersion: true, exportedAt: true, exportedScore: true },
   });
   return getGradingStatus(quiz, attempts);
+}
+
+// Cap exportació pot saltar-se la correcció pendent.
+async function assertExportable(quiz) {
+  const status = await gradingStatusFor(quiz);
+  if (status.needsRegrade > 0) throw fail(409, 'Reavalua els intents abans d’exportar les notes a Classroom');
+  if (status.pendingReview > 0) throw fail(409, 'Revisa les respostes manuals abans d’actualitzar les notes a Classroom');
 }
 
 router.get('/me', (req, res) => {
@@ -739,9 +747,16 @@ router.delete('/quizzes/:id/classroom/:courseId', wrap(async (req, res) => {
 router.get('/quizzes/:id/classroom/students', wrap(async (req, res) => {
   const quiz = await ownQuiz(req, { classrooms: true });
   if (!quiz.classrooms.length) return res.json([]);
-  const students = await classroom.listStudents(quiz.teacherId, quiz.classrooms.map((link) => link.courseId));
+  let students;
+  try {
+    students = await classroom.listStudents(quiz.teacherId, quiz.classrooms.map((link) => link.courseId));
+  } catch (e) {
+    // Permís de rosters no concedit (tokens anteriors a aquesta versió) o curs inaccessible.
+    if (e?.code === 403 || e?.response?.status === 403) throw fail(409, 'Cal tornar a connectar Google Classroom per poder llegir la llista d’alumnes');
+    throw e;
+  }
   const q = fold(String(req.query.q || '').slice(0, 60));
-  res.json(q ? students.filter((student) => fold(student.name).includes(q) || student.email.includes(q)) : students);
+  res.json(q ? students.filter((student) => fold(`${student.name} ${student.email}`).includes(q)) : students);
 }));
 
 router.get('/quizzes/:id/extensions', wrap(async (req, res) => {
@@ -775,11 +790,43 @@ router.delete('/quizzes/:id/extensions/:eid', wrap(async (req, res) => {
 
 router.post('/quizzes/:id/export', wrap(async (req, res) => {
   const quiz = await ownQuiz(req);
-  const status = await gradingStatusFor(quiz);
-  if (status.needsRegrade > 0) throw fail(409, 'Reavalua els intents abans d’exportar les notes a Classroom');
-  if (status.pendingReview > 0) throw fail(409, 'Revisa les respostes manuals abans d’actualitzar les notes a Classroom');
+  await assertExportable(quiz);
   const { returnToStudents } = z.object({ returnToStudents: z.boolean().optional() }).parse(req.body || {});
   res.json(await classroom.exportGrades(quiz.id, { returnToStudents }));
+}));
+
+// Exportació amb progrés: respon de seguida amb un jobId i el client en consulta l'estat.
+router.post('/quizzes/:id/export/jobs', wrap(async (req, res) => {
+  const quiz = await ownQuiz(req);
+  await assertExportable(quiz);
+  const { returnToStudents } = z.object({ returnToStudents: z.boolean().optional() }).parse(req.body || {});
+  const job = exportJobs.create({ quizId: quiz.id, teacherId: req.user.id, returnToStudents: !!returnToStudents });
+  if (exportJobs.claim(job)) {
+    classroom
+      .exportGrades(quiz.id, {
+        returnToStudents: job.returnToStudents,
+        skipUnchanged: true,
+        shouldStop: () => job.cancelled,
+        onEvent: (event) => exportJobs.handle(job, event),
+      })
+      .then((results) => exportJobs.finish(job, results))
+      .catch((e) => exportJobs.fail(job, e.message));
+  }
+  res.status(202).json({ jobId: job.id });
+}));
+
+router.get('/quizzes/:id/export/jobs/:jobId', wrap(async (req, res) => {
+  const quiz = await ownQuiz(req);
+  const job = exportJobs.get(req.params.jobId);
+  if (!job || job.quizId !== quiz.id || job.teacherId !== req.user.id) throw fail(404, 'Exportació no trobada');
+  res.json(exportJobs.snapshot(job));
+}));
+
+router.delete('/quizzes/:id/export/jobs/:jobId', wrap(async (req, res) => {
+  const quiz = await ownQuiz(req);
+  const job = exportJobs.get(req.params.jobId);
+  if (!job || job.quizId !== quiz.id || job.teacherId !== req.user.id) throw fail(404, 'Exportació no trobada');
+  res.json(exportJobs.snapshot(exportJobs.cancel(job)));
 }));
 
 module.exports = router;
