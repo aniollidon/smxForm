@@ -47,7 +47,7 @@ function Settings({ quiz, onSaved }) {
         body: {
           title: f.title, description: f.description, maxScore: Number(f.maxScore), shuffleQuestions: f.shuffleQuestions,
           allowRetry: f.allowRetry, maxAttempts: f.allowRetry ? Number(f.maxAttempts) : 1, negativePenalty: Number(f.negativePenalty),
-          gradeToExport: f.gradeToExport, showResults: f.showResults, published: f.published,
+          gradeToExport: f.gradeToExport, showResults: f.showResults, showReferenceAnswer: f.showReferenceAnswer, published: f.published,
           showResultsFrom: f.showResultsFrom ? new Date(f.showResultsFrom).toISOString() : null,
         },
       });
@@ -90,6 +90,7 @@ function Settings({ quiz, onSaved }) {
         </label>
         <label>A partir de (opcional) <input type="datetime-local" value={f.showResultsFrom} onChange={(e) => set({ showResultsFrom: e.target.value })} /></label>
       </div>
+      {check('showReferenceAnswer', 'Mostrar les respostes de referència a l’alumne')}
       {check('published', 'Publicada (l\'enllaç funciona)')}
       <div className="row"><button onClick={save}>Desa</button><span className="muted">{msg}</span></div>
     </div>

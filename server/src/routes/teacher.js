@@ -133,6 +133,7 @@ const quizSchema = z.object({
   gradeToExport: z.enum(['BEST', 'LAST']).default('BEST'),
   showResults: z.enum(['NONE', 'SCORE', 'FULL', 'ANSWERS']).default('SCORE'),
   showResultsFrom: z.string().datetime().nullable().optional(),
+  showReferenceAnswer: z.boolean().default(true),
   published: z.boolean().default(true),
 });
 

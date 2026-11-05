@@ -94,6 +94,7 @@ export function exportQuiz(quiz, imageByName = {}) {
     gradeToExport: quiz.gradeToExport,
     showResults: quiz.showResults,
     showResultsFrom: quiz.showResultsFrom,
+    showReferenceAnswer: quiz.showReferenceAnswer,
   };
   const groupKeys = new Map();
   const groups = {};
@@ -316,6 +317,7 @@ export function parsePortableQuiz(data) {
     gradeToExport: settings.gradeToExport ?? 'BEST',
     showResults: settings.showResults ?? 'SCORE',
     showResultsFrom: settings.showResultsFrom ?? null,
+    showReferenceAnswer: settings.showReferenceAnswer ?? true,
   };
   requireValue(Number.isFinite(quiz.maxScore) && quiz.maxScore > 0 && quiz.maxScore <= 1000, '«settings.maxScore» ha de ser superior a zero i com a màxim 1000.');
   requireValue(typeof quiz.shuffleQuestions === 'boolean' && typeof quiz.allowRetry === 'boolean', '«settings.shuffleQuestions» i «settings.allowRetry» han de ser booleans.');
@@ -323,6 +325,7 @@ export function parsePortableQuiz(data) {
   requireValue(Number.isFinite(quiz.negativePenalty) && quiz.negativePenalty >= 0 && quiz.negativePenalty <= 1, '«settings.negativePenalty» ha de ser un nombre entre 0 i 1.');
   requireValue(['BEST', 'LAST'].includes(quiz.gradeToExport), '«settings.gradeToExport» ha de ser «BEST» o «LAST».');
   requireValue(['NONE', 'SCORE', 'FULL', 'ANSWERS'].includes(quiz.showResults), '«settings.showResults» ha de ser «NONE», «SCORE», «ANSWERS» o «FULL».');
+  requireValue(typeof quiz.showReferenceAnswer === 'boolean', '«settings.showReferenceAnswer» ha de ser booleà.');
   if (quiz.showResultsFrom !== null) {
     requireValue(typeof quiz.showResultsFrom === 'string' && /T.*(?:Z|[+-]\d\d:\d\d)$/.test(quiz.showResultsFrom) && !Number.isNaN(Date.parse(quiz.showResultsFrom)), '«settings.showResultsFrom» ha de ser una data ISO 8601 amb zona horària o null.');
     quiz.showResultsFrom = new Date(quiz.showResultsFrom).toISOString();

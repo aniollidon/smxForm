@@ -14,7 +14,8 @@ const example = `{
     "negativePenalty": 0,
     "gradeToExport": "BEST",
     "showResults": "SCORE",
-    "showResultsFrom": null
+    "showResultsFrom": null,
+    "showReferenceAnswer": true
   },
   "groups": { "g1": "Llegeix el text sobre la fotosíntesi i respon:" },
   "questions": [
@@ -84,6 +85,7 @@ export default function PortableFormatDocs() {
           <Field name="gradeToExport"><code>BEST</code> (millor intent) o <code>LAST</code> (últim intent); per defecte <code>BEST</code>. S’aplica en exportar notes a Classroom quan l’entrega permet intents repetits; a l’editor, aquesta opció només apareix en activar <code>allowRetry</code>.</Field>
           <Field name="showResults"><code>NONE</code> (no mostra resultats), <code>SCORE</code> (només nota), <code>ANSWERS</code> (nota i respostes sense corregir) o <code>FULL</code> (nota, respostes i clau); per defecte <code>SCORE</code>.</Field>
           <Field name="showResultsFrom">Data/hora ISO 8601 amb zona horària, per exemple <code>2026-10-14T08:00:00.000Z</code>; amaga els resultats fins aquell moment. <code>null</code> o absència: sense retard.</Field>
+          <Field name="showReferenceAnswer">Booleà. Controla si l’alumne pot veure les respostes de referència, quan els resultats de la tasca es mostren en mode <code>FULL</code>; per defecte <code>true</code>.</Field>
         </tbody></table></div>
         <p>La importació sempre crea l’entrega com a esborrany no publicat. L’estat de publicació, l’enllaç públic, l’enllaç de Classroom i els intents no formen part del fitxer.</p>
 

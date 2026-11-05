@@ -91,6 +91,7 @@ export default function TeacherHome() {
           gradeToExport: portable.gradeToExport,
           showResults: portable.showResults,
           showResultsFrom: portable.showResultsFrom,
+          showReferenceAnswer: portable.showReferenceAnswer,
           published: false,
         },
       });

@@ -74,6 +74,8 @@ function attemptResult(attempt, quiz, questions, answers) {
     base.questions = questions.map((q) => {
       const a = byQ.get(q.id);
       const pq = personalize({ ...q, config: JSON.parse(q.config), answerKey: JSON.parse(q.answerKey) }, attempt.seed);
+      const answerKeyWithoutReference = { ...pq.answerKey };
+      delete answerKeyWithoutReference.reference;
       return {
         id: q.id,
         sectionTitle: q.sectionTitle,
@@ -83,7 +85,7 @@ function attemptResult(attempt, quiz, questions, answers) {
         points: q.points,
         imageUrl: q.imageUrl,
         config: pq.config,
-        answerKey: corrected ? pq.answerKey : null,
+        answerKey: corrected ? (quiz.showReferenceAnswer ? pq.answerKey : answerKeyWithoutReference) : null,
         value: a ? JSON.parse(a.value) : null,
         fileUrl: a?.fileUrl ?? null,
         score: corrected ? a?.score ?? null : null,

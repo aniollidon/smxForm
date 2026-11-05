@@ -7,7 +7,7 @@ const image = 'data:image/png;base64,aGVsbG8=';
 test('round-trips semantic answers for every supported question type', () => {
   const quiz = {
     title: 'Prova', description: 'Descripció', maxScore: 12, shuffleQuestions: true, allowRetry: true,
-    maxAttempts: 3, negativePenalty: 0.25, gradeToExport: 'LAST', showResults: 'FULL', showResultsFrom: null,
+    maxAttempts: 3, negativePenalty: 0.25, gradeToExport: 'LAST', showResults: 'FULL', showResultsFrom: null, showReferenceAnswer: false,
     questions: [
       { type: 'MCQ', text: 'Tria', points: 2, required: true, shuffleOptions: true, config: { multiple: true, allowClipboard: true, options: [{ id: 'a', text: 'A' }, { id: 'b', text: 'B' }] }, answerKey: { correct: ['b'], allOrNothing: true } },
       { type: 'TRUE_FALSE', text: 'Cert?', points: 1, required: false, shuffleOptions: false, config: {}, answerKey: { correct: false } },
@@ -22,6 +22,7 @@ test('round-trips semantic answers for every supported question type', () => {
   };
   const parsed = parsePortableQuiz(exportQuiz(quiz, { 'q_image.png': image }));
   assert.equal(parsed.title, quiz.title);
+  assert.equal(parsed.showReferenceAnswer, false);
   assert.deepEqual(parsed.drafts.map((question) => question.type), quiz.questions.map((question) => question.type));
   assert.equal(parsed.drafts[0].allowClipboard, true);
   assert.equal(parsed.drafts[0].allOrNothing, true);
@@ -50,6 +51,7 @@ test('rejects unsupported versions and malformed question fields', () => {
   assert.throws(() => parsePortableQuiz({ format: 'palamForm.quiz', version: 1, title: 'Prova', questions: [{ type: 'MCQ', text: 'Tria', options: [{ text: 'A', correct: true }, { text: 'B', correct: true }] }] }), /exactament una/);
   assert.throws(() => parsePortableQuiz({ format: 'palamForm.quiz', version: 1, title: 'Prova', questions: [{ type: 'SHORT_TEXT', text: 'Breu', regex: 'x'.repeat(201) }] }), /fins a 200/);
   assert.throws(() => parsePortableQuiz({ format: 'palamForm.quiz', version: 1, title: 'Prova', questions: [{ type: 'ORDERING', text: 'Ordena', items: ['Un'] }] }), /entre 2 i 30/);
+  assert.throws(() => parsePortableQuiz({ format: 'palamForm.quiz', version: 1, title: 'Prova', settings: { showReferenceAnswer: 'no' }, questions: [{ type: 'TRUE_FALSE', text: 'Cert?', correct: true }] }), /booleà/);
 });
 
 test('imports calculated variables generated from a list', () => {

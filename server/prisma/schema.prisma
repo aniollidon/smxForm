@@ -32,6 +32,7 @@ model Quiz {
   gradeToExport         String     @default("BEST") // BEST | LAST
   showResults           String     @default("SCORE") // NONE | SCORE | FULL | ANSWERS
   showResultsFrom       DateTime? // si està definit, els resultats només es veuen a partir d'aquesta data
+  showReferenceAnswer   Boolean    @default(true)
   published             Boolean    @default(true)
   publicSlug            String     @unique
   gradingVersion        Int        @default(0)
