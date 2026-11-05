@@ -22,7 +22,7 @@ export default function StudentHome() {
               <td>{a.quizTitle}</td>
               <td>{a.status === 'IN_PROGRESS' ? 'En curs' : a.status === 'NEEDS_REVIEW' ? 'Pendent de correcció' : 'Corregida'}</td>
               <td>{a.score != null ? `${formatGrade(a.score)} / ${formatGrade(a.maxScore)}` : '—'}</td>
-              <td><Link to={a.status === 'IN_PROGRESS' ? `/attempt/${a.id}` : `/q/${a.slug}`}>Obre</Link></td>
+              <td><Link to={`/attempt/${a.id}`}>Obre</Link></td>
             </tr>
           ))}
         </tbody>
