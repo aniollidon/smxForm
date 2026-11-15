@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { exportQuiz, parsePortableQuiz } from '../src/portableQuiz.js';
+import { exportQuiz, parsePortableQuestions, parsePortableQuiz } from '../src/portableQuiz.js';
+import { toPayload } from '../src/questionModel.js';
 
 const image = 'data:image/png;base64,aGVsbG8=';
 
@@ -52,6 +53,34 @@ test('rejects unsupported versions and malformed question fields', () => {
   assert.throws(() => parsePortableQuiz({ format: 'palamForm.quiz', version: 1, title: 'Prova', questions: [{ type: 'SHORT_TEXT', text: 'Breu', regex: 'x'.repeat(201) }] }), /fins a 200/);
   assert.throws(() => parsePortableQuiz({ format: 'palamForm.quiz', version: 1, title: 'Prova', questions: [{ type: 'ORDERING', text: 'Ordena', items: ['Un'] }] }), /entre 2 i 30/);
   assert.throws(() => parsePortableQuiz({ format: 'palamForm.quiz', version: 1, title: 'Prova', settings: { showReferenceAnswer: 'no' }, questions: [{ type: 'TRUE_FALSE', text: 'Cert?', correct: true }] }), /booleà/);
+});
+
+test('imports matching questions without optional distractors through both entry points', () => {
+  const question = {
+    type: 'MATCHING', text: 'Relaciona',
+    pairs: [{ left: 'Vector Query', right: 'Pany' }, { left: 'Vector Key', right: 'Clau' }],
+  };
+  const quiz = { format: 'palamForm.quiz', version: 1, title: 'Prova', questions: [question] };
+  for (const draft of [parsePortableQuiz(quiz).drafts[0], parsePortableQuestions([question])[0], parsePortableQuestions(question)[0]]) {
+    assert.deepEqual(draft.pairs, question.pairs);
+    assert.equal(draft.distractors, '');
+    const payload = toPayload(draft);
+    assert.deepEqual(payload.config.right.map((item) => item.text), ['Pany', 'Clau']);
+    assert.deepEqual(payload.answerKey.pairs, { l0: 'r0', l1: 'r1' });
+  }
+  assert.equal(parsePortableQuestions({ ...question, distractors: null })[0].distractors, '');
+});
+
+test('validates matching distractor types and the total response limit', () => {
+  const question = {
+    type: 'MATCHING', text: 'Relaciona',
+    pairs: [{ left: 'A', right: '1' }, { left: 'B', right: '2' }],
+  };
+  const distractors = Array.from({ length: 13 }, (_, index) => `Extra ${index}`);
+  assert.equal(parsePortableQuestions({ ...question, distractors })[0].distractors, distractors.join('\n'));
+  for (const invalid of ['extra', [42], [...distractors, 'massa']]) {
+    assert.throws(() => parsePortableQuestions({ ...question, distractors: invalid }), /MATCHING: «distractors»/);
+  }
 });
 
 test('imports calculated variables generated from a list', () => {

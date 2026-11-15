@@ -40,6 +40,11 @@ Executa també la comanda `sudo` que imprimeix `pm2 startup` per habilitar l'ini
 Són usuaris a la BD amb `role=TEACHER`: `SEED_TEACHERS` (al `.env`) o `npm run add-teacher -- correu@inspalamos.cat`.
 Qui entra amb @inspalamos.cat i no és professor és alumne.
 
+### Classes de la biblioteca
+Cada entrega té una classe (assignatura) per organitzar la biblioteca del professor. A «Configuració» es pot seleccionar una classe existent o escriure'n una de nova; si es deixa en blanc, s'assigna «General». Les entregues existents i les importades també comencen a «General», i les còpies conserven la classe original. El filtre de la biblioteca mostra només les classes amb entregues. Aquesta etiqueta és privada de la biblioteca i no modifica els cursos de Google Classroom ni el fitxer JSON exportat.
+
+En actualitzar una instal·lació existent, executa `cd server && npx prisma db push` abans de reiniciar el servidor per afegir el camp amb el valor predeterminat «General».
+
 ## Classroom
 El professor connecta Classroom des de l'editor de l'entrega, tria el curs i es crea una tasca (esborrany) amb el mateix nom i l'enllaç al quiz. Cal publicar-la al Classroom: l'accés a l'enllaç només es permet als alumnes amb la tasca assignada i mentre sigui publicada i dins del termini. «Exporta notes» envia la nota (millor o última) a cada alumne.
 

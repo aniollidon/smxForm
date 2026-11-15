@@ -175,6 +175,7 @@ code { padding: 2px 5px; border: 1px solid #414141; border-radius: 2px; backgrou
 .list-heading { margin: 34px 0 16px; color: var(--paper); }
 .list-heading .eyebrow { color: #a3a3a3; }
 .list-heading h2 { color: var(--paper); }
+.subject-filter { display: block; max-width: 300px; margin-bottom: 16px; }
 .quiz-row { min-height: 92px; padding: 17px 19px; }
 .quiz-row > div:first-child { min-width: min(100%, 320px); }
 .quiz-row > div:first-child > a { color: #f2f0ed; }

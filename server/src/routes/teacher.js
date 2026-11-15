@@ -125,6 +125,7 @@ function parseQuestion(body) {
 const quizSchema = z.object({
   title: z.string().min(1).max(200),
   description: z.string().max(5000).default(''),
+  subject: z.string().trim().max(100).transform((value) => !value || value.toLowerCase() === 'general' ? 'General' : value).optional(),
   maxScore: z.number().positive().max(1000).default(10),
   shuffleQuestions: z.boolean().default(false),
   allowRetry: z.boolean().default(false),
@@ -243,6 +244,15 @@ router.get('/quizzes', wrap(async (req, res) => {
   for (const attempt of attempts) attemptsByQuiz.get(attempt.quizId).push(attempt);
   const enriched = quizzes.map((quiz) => ({ ...quiz, gradingStatus: getGradingStatus(quiz, attemptsByQuiz.get(quiz.id)) }));
   res.json(enriched);
+}));
+
+router.get('/subjects', wrap(async (req, res) => {
+  const quizzes = await prisma.quiz.findMany({
+    where: { teacherId: req.user.id },
+    select: { subject: true },
+    distinct: ['subject'],
+  });
+  res.json(quizzes.map((quiz) => quiz.subject).sort((a, b) => a.localeCompare(b, 'ca')));
 }));
 
 router.post('/quizzes', wrap(async (req, res) => {

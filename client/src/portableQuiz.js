@@ -197,9 +197,10 @@ export function importQuestionToDraft(question) {
     case 'MATCHING': {
       requireValue(Array.isArray(question.pairs) && question.pairs.length >= 2 && question.pairs.length <= 12, 'MATCHING: «pairs» ha de tenir entre 2 i 12 parelles.');
       requireValue(question.pairs.every((pair) => typeof pair.left === 'string' && typeof pair.right === 'string'), 'MATCHING: cada parella necessita «left» i «right» de tipus string.');
-      requireValue(Array.isArray(question.distractors ?? []) && question.distractors.length + question.pairs.length <= 15 && (question.distractors ?? []).every((item) => typeof item === 'string'), 'MATCHING: «distractors» ha de ser una llista de text; el total de respostes no pot superar 15.');
+      const distractors = question.distractors ?? [];
+      requireValue(Array.isArray(distractors) && distractors.length + question.pairs.length <= 15 && distractors.every((item) => typeof item === 'string'), 'MATCHING: «distractors» ha de ser una llista de text; el total de respostes no pot superar 15.');
       requireValue(typeof (question.allOrNothing ?? false) === 'boolean', 'MATCHING: «allOrNothing» ha de ser boolean.');
-      draft = { ...base, allOrNothing: question.allOrNothing ?? false, pairs: (question.pairs || []).map((pair) => ({ left: pair.left, right: pair.right })), distractors: (question.distractors || []).join('\n') };
+      draft = { ...base, allOrNothing: question.allOrNothing ?? false, pairs: (question.pairs || []).map((pair) => ({ left: pair.left, right: pair.right })), distractors: distractors.join('\n') };
       break;
     }
     case 'ORDERING':

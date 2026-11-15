@@ -16,12 +16,15 @@ export default function TeacherHome() {
   const qc = useQueryClient();
   const nav = useNavigate();
   const [title, setTitle] = useState('');
+  const [subjectFilter, setSubjectFilter] = useState('');
   const [importBusy, setImportBusy] = useState(false);
   const [importMessage, setImportMessage] = useState('');
   const [gradeAction, setGradeAction] = useState(null);
   const [gradeMessage, setGradeMessage] = useState({});
   const importInput = useRef(null);
-  const { data, isLoading } = useQuery({ queryKey: ['quizzes'], queryFn: () => api('/api/teacher/quizzes') });
+  const { data, isLoading, isError, error } = useQuery({ queryKey: ['quizzes'], queryFn: () => api('/api/teacher/quizzes') });
+  const subjects = [...new Set((data || []).map((quiz) => quiz.subject))].sort((a, b) => a.localeCompare(b, 'ca'));
+  const activeFilter = subjects.includes(subjectFilter) ? subjectFilter : '';
   const refresh = () => qc.invalidateQueries({ queryKey: ['quizzes'] });
   const onExportFinished = useCallback((job) => {
     const results = job.results || [];
@@ -130,12 +133,20 @@ export default function TeacherHome() {
       </div>
       <div className="panel-heading list-heading"><div><span className="eyebrow">BIBLIOTECA</span><h2>Activitats creades</h2></div><span className="panel-index">02 / GESTIÓ</span></div>
       {isLoading && <p>Carregant…</p>}
-      {!isLoading && !data?.length && <div className="card empty-state">Encara no has creat cap entrega.</div>}
-      {data?.map((q) => (
+      {isError && <p className="error">No s’han pogut carregar les entregues: {error.message}</p>}
+      {!!data?.length && <label className="subject-filter">Classe
+        <select value={activeFilter} onChange={(e) => setSubjectFilter(e.target.value)}>
+          <option value="">Totes les classes</option>
+          {subjects.map((subject) => <option key={subject} value={subject}>{subject}</option>)}
+        </select>
+      </label>}
+      {!isLoading && !isError && !data?.length && <div className="card empty-state">Encara no has creat cap entrega.</div>}
+      {data?.filter((q) => !activeFilter || q.subject === activeFilter).map((q) => (
         <div className="card row between quiz-row" key={q.id}>
           <div>
             <Link to={`/t/quiz/${q.id}`}><b>{q.title}</b></Link>{' '}
             <span className="badge">{q.published ? 'Publicada' : 'Esborrany'}</span>
+            {' '}<span className="badge">{q.subject}</span>
             <div className="muted">{q._count.questions} preguntes · {q._count.attempts} intents{q.classrooms?.length > 0 && ` · Classroom (${q.classrooms.length})`}</div>
             {q.gradingStatus?.needsRegrade > 0 && <p className="grade-warning">Hi ha {q.gradingStatus.needsRegrade} intents corregits amb una versió anterior de les preguntes.</p>}
             {q.gradingStatus?.pendingReview > 0 && <p className="grade-warning">Hi ha {q.gradingStatus.pendingReview} intents pendents de revisió manual.</p>}

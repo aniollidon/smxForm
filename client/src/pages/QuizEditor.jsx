@@ -36,6 +36,10 @@ const courseSummary = (course) => {
 function Settings({ quiz, onSaved }) {
   const [f, setF] = useState(null);
   const [msg, setMsg] = useState('');
+  const { data: subjects, isError: subjectsError, error: subjectsErrorDetail } = useQuery({
+    queryKey: ['subjects'],
+    queryFn: () => api('/api/teacher/subjects'),
+  });
   useEffect(() => setF({ ...quiz, showResultsFrom: toLocal(quiz.showResultsFrom) }), [quiz]);
   if (!f) return null;
   const set = (p) => setF((x) => ({ ...x, ...p }));
@@ -45,7 +49,7 @@ function Settings({ quiz, onSaved }) {
       await api(`/api/teacher/quizzes/${quiz.id}`, {
         method: 'PUT',
         body: {
-          title: f.title, description: f.description, maxScore: Number(f.maxScore), shuffleQuestions: f.shuffleQuestions,
+          title: f.title, description: f.description, subject: f.subject, maxScore: Number(f.maxScore), shuffleQuestions: f.shuffleQuestions,
           allowRetry: f.allowRetry, maxAttempts: f.allowRetry ? Number(f.maxAttempts) : 1, negativePenalty: Number(f.negativePenalty),
           gradeToExport: f.gradeToExport, showResults: f.showResults, showReferenceAnswer: f.showReferenceAnswer, published: f.published,
           showResultsFrom: f.showResultsFrom ? new Date(f.showResultsFrom).toISOString() : null,
@@ -62,6 +66,12 @@ function Settings({ quiz, onSaved }) {
       <h3>Configuració</h3>
       <label>Títol<input type="text" value={f.title} onChange={(e) => set({ title: e.target.value })} /></label>
       <label>Descripció<textarea value={f.description} onChange={(e) => set({ description: e.target.value })} /></label>
+      <label>Classe (assignatura)
+        <input type="text" list="quiz-subjects" maxLength={100} value={f.subject} onChange={(e) => set({ subject: e.target.value })} placeholder="General" />
+      </label>
+      <datalist id="quiz-subjects">{subjects?.map((subject) => <option key={subject} value={subject} />)}</datalist>
+      <span className="muted">Tria una classe o escriu-ne una de nova. Si ho deixes en blanc, serà General. Només s’utilitza a la biblioteca, no a Classroom.</span>
+      {subjectsError && <span className="error">No s’han pogut carregar les classes: {subjectsErrorDetail.message}</span>}
       <div className="row">
         <label>Nota màxima <input type="number" min="1" step="0.5" value={f.maxScore} onChange={(e) => set({ maxScore: e.target.value })} /></label>
         <label>Penalització per error (fracció dels punts, 0 = no resta) <input type="number" min="0" max="1" step="0.05" value={f.negativePenalty} onChange={(e) => set({ negativePenalty: e.target.value })} /></label>
@@ -466,7 +476,11 @@ export default function QuizEditor() {
   const importInput = useRef(null);
   const [gradeAction, setGradeAction] = useState('');
   const [gradeMessage, setGradeMessage] = useState('');
-  const refresh = () => qc.invalidateQueries({ queryKey: ['quiz-edit', id] });
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ['quiz-edit', id] });
+    qc.invalidateQueries({ queryKey: ['subjects'] });
+    qc.invalidateQueries({ queryKey: ['quizzes'] });
+  };
   if (isLoading) return <p>Carregant…</p>;
   if (error) return <p className="error">{error.message}</p>;
 
