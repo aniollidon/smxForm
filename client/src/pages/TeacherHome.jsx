@@ -10,21 +10,20 @@ import FormatMenu from '../components/FormatMenu.jsx';
 import { usePrompt } from '../components/PromptProvider.jsx';
 import ExportProgressDialog from '../components/ExportProgressDialog.jsx';
 import { useExportJob } from '../useExportJob.js';
+import { groupQuizzesBySubject } from '../groupQuizzesBySubject.js';
 
 export default function TeacherHome() {
   const { confirm } = usePrompt();
   const qc = useQueryClient();
   const nav = useNavigate();
   const [title, setTitle] = useState('');
-  const [subjectFilter, setSubjectFilter] = useState('');
   const [importBusy, setImportBusy] = useState(false);
   const [importMessage, setImportMessage] = useState('');
   const [gradeAction, setGradeAction] = useState(null);
   const [gradeMessage, setGradeMessage] = useState({});
   const importInput = useRef(null);
   const { data, isLoading, isError, error } = useQuery({ queryKey: ['quizzes'], queryFn: () => api('/api/teacher/quizzes') });
-  const subjects = [...new Set((data || []).map((quiz) => quiz.subject))].sort((a, b) => a.localeCompare(b, 'ca'));
-  const activeFilter = subjects.includes(subjectFilter) ? subjectFilter : '';
+  const subjectGroups = groupQuizzesBySubject(data || []);
   const refresh = () => qc.invalidateQueries({ queryKey: ['quizzes'] });
   const onExportFinished = useCallback((job) => {
     const results = job.results || [];
@@ -134,33 +133,31 @@ export default function TeacherHome() {
       <div className="panel-heading list-heading"><div><span className="eyebrow">BIBLIOTECA</span><h2>Activitats creades</h2></div><span className="panel-index">02 / GESTIÓ</span></div>
       {isLoading && <p>Carregant…</p>}
       {isError && <p className="error">No s’han pogut carregar les entregues: {error.message}</p>}
-      {!!data?.length && <label className="subject-filter">Classe
-        <select value={activeFilter} onChange={(e) => setSubjectFilter(e.target.value)}>
-          <option value="">Totes les classes</option>
-          {subjects.map((subject) => <option key={subject} value={subject}>{subject}</option>)}
-        </select>
-      </label>}
       {!isLoading && !isError && !data?.length && <div className="card empty-state">Encara no has creat cap entrega.</div>}
-      {data?.filter((q) => !activeFilter || q.subject === activeFilter).map((q) => (
-        <div className="card row between quiz-row" key={q.id}>
-          <div>
-            <Link to={`/t/quiz/${q.id}`}><b>{q.title}</b></Link>{' '}
-            <span className="badge">{q.published ? 'Publicada' : 'Esborrany'}</span>
-            {' '}<span className="badge">{q.subject}</span>
-            <div className="muted">{q._count.questions} preguntes · {q._count.attempts} intents{q.classrooms?.length > 0 && ` · Classroom (${q.classrooms.length})`}</div>
-            {q.gradingStatus?.needsRegrade > 0 && <p className="grade-warning">Hi ha {q.gradingStatus.needsRegrade} intents corregits amb una versió anterior de les preguntes.</p>}
-            {q.gradingStatus?.pendingReview > 0 && <p className="grade-warning">Hi ha {q.gradingStatus.pendingReview} intents pendents de revisió manual.</p>}
-            {q.gradingStatus?.classroomUpdates > 0 && <p className="grade-warning">Les notes exportades a Classroom han canviat per a {q.gradingStatus.classroomUpdates} alumnes.</p>}
-            {gradeMessage[q.id] && <p className={gradeMessage[q.id].error ? 'error' : 'muted'}>{gradeMessage[q.id].text}</p>}
-          </div>
-          <div className="row">
-            <Link to={`/t/quiz/${q.id}/attempts`}>Intents</Link>
-            {q.gradingStatus?.needsRegrade > 0 && <button disabled={gradeAction?.id === q.id || (exportJob.running && exportJob.quizId === q.id)} onClick={() => runGradeAction(q, 'regrade')}>{gradeAction?.id === q.id && gradeAction.action === 'regrade' ? 'Reavaluant…' : 'Reavalua intents'}</button>}
-            {q.gradingStatus?.classroomUpdates > 0 && q.classrooms?.length > 0 && <button className="secondary" disabled={(exportJob.running && exportJob.quizId === q.id) || gradeAction?.id === q.id || q.gradingStatus?.needsRegrade > 0 || q.gradingStatus?.pendingReview > 0} onClick={() => runGradeAction(q, 'classroom')}>{exportJob.running && exportJob.quizId === q.id ? `Exportant… ${exportJob.progress.done}/${exportJob.progress.total || '?'}` : 'Actualitza Classroom'}</button>}
-            <button className="secondary" onClick={() => dup.mutate(q.id)}>Duplica</button>
-            <button className="danger" disabled={exportJob.running && exportJob.quizId === q.id} onClick={() => deleteQuiz(q)}>Esborra</button>
-          </div>
-        </div>
+      {subjectGroups.map(([subject, quizzes]) => (
+        <section className="subject-section" key={subject}>
+          <h3>{subject}</h3>
+          {quizzes.map((q) => (
+            <div className="card row between quiz-row" key={q.id}>
+              <div>
+                <Link to={`/t/quiz/${q.id}`}><b>{q.title}</b></Link>{' '}
+                <span className="badge">{q.published ? 'Publicada' : 'Esborrany'}</span>
+                <div className="muted">{q._count.questions} preguntes · {q._count.attempts} intents{q.classrooms?.length > 0 && ` · Classroom (${q.classrooms.length})`}</div>
+                {q.gradingStatus?.needsRegrade > 0 && <p className="grade-warning">Hi ha {q.gradingStatus.needsRegrade} intents corregits amb una versió anterior de les preguntes.</p>}
+                {q.gradingStatus?.pendingReview > 0 && <p className="grade-warning">Hi ha {q.gradingStatus.pendingReview} intents pendents de revisió manual.</p>}
+                {q.gradingStatus?.classroomUpdates > 0 && <p className="grade-warning">Les notes exportades a Classroom han canviat per a {q.gradingStatus.classroomUpdates} alumnes.</p>}
+                {gradeMessage[q.id] && <p className={gradeMessage[q.id].error ? 'error' : 'muted'}>{gradeMessage[q.id].text}</p>}
+              </div>
+              <div className="row">
+                <Link to={`/t/quiz/${q.id}/attempts`}>Intents</Link>
+                {q.gradingStatus?.needsRegrade > 0 && <button disabled={gradeAction?.id === q.id || (exportJob.running && exportJob.quizId === q.id)} onClick={() => runGradeAction(q, 'regrade')}>{gradeAction?.id === q.id && gradeAction.action === 'regrade' ? 'Reavaluant…' : 'Reavalua intents'}</button>}
+                {q.gradingStatus?.classroomUpdates > 0 && q.classrooms?.length > 0 && <button className="secondary" disabled={(exportJob.running && exportJob.quizId === q.id) || gradeAction?.id === q.id || q.gradingStatus?.needsRegrade > 0 || q.gradingStatus?.pendingReview > 0} onClick={() => runGradeAction(q, 'classroom')}>{exportJob.running && exportJob.quizId === q.id ? `Exportant… ${exportJob.progress.done}/${exportJob.progress.total || '?'}` : 'Actualitza Classroom'}</button>}
+                <button className="secondary" onClick={() => dup.mutate(q.id)}>Duplica</button>
+                <button className="danger" disabled={exportJob.running && exportJob.quizId === q.id} onClick={() => deleteQuiz(q)}>Esborra</button>
+              </div>
+            </div>
+          ))}
+        </section>
       ))}
       <ExportProgressDialog
         open={exportJob.open}
