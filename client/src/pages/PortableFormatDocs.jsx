@@ -94,7 +94,7 @@ export default function PortableFormatDocs() {
           <Field name="type">Obligatori. Un dels tipus exactes que es detallen més avall.</Field>
           <Field name="text">Obligatori. Enunciat de text no buit, fins a 5000 caràcters.</Field>
           <Field name="points">Nombre entre 0 i 1000; per defecte <code>1</code>.</Field>
-          <Field name="required">Booleà. Si és true, l’alumne l’ha de respondre per enviar; per defecte <code>true</code>.</Field>
+          <Field name="required">Booleà. Si és true, l’alumne l’ha de respondre per enviar; les preguntes <code>ORDERING</code> compten com a resposta des de l’ordre inicial mostrat. Per defecte <code>true</code>.</Field>
           <Field name="shuffleOptions">Booleà. Barreja les opcions que admeten ordre aleatori; per defecte <code>true</code> als tipus compatibles, <code>false</code> a la resta.</Field>
           <Field name="allowClipboard">Booleà. Permet copiar i enganxar en aquesta pregunta; per defecte <code>false</code>.</Field>
           <Field name="section">Opcional. Títol (fins a 200 caràcters) d’una secció nova que comença en aquesta pregunta; l’alumne la veu com una pàgina.</Field>
@@ -119,7 +119,7 @@ export default function PortableFormatDocs() {
       "distractors": ["21"], "allOrNothing": true`}</code></pre>
 
         <h3><code>ORDERING</code> · Ordenar una llista</h3>
-        <p><code>items</code> és una llista de 2 a 30 cadenes no buides (fins a 500 caràcters cadascuna) en l’ordre correcte. Durant l’intent es poden reordenar; per defecte, es dona puntuació parcial pels elements situats correctament. Amb <code>allOrNothing: true</code>, només l’ordre completament correcte puntua; qualsevol altre ordre compta com a incorrecte. Si s’omet, és <code>false</code>.</p>
+        <p><code>items</code> és una llista de 2 a 30 cadenes no buides (fins a 500 caràcters cadascuna) en l’ordre correcte. L’ordre inicial que veu l’alumne compta com a resposta, encara que no mogui cap element. Durant l’intent es poden reordenar; per defecte, es dona puntuació parcial pels elements situats correctament. Amb <code>allOrNothing: true</code>, només l’ordre completament correcte puntua; qualsevol altre ordre compta com a incorrecte. Si s’omet, és <code>false</code>.</p>
         <pre><code>{`"type": "ORDERING", "items": ["Planifica", "Executa", "Avalua"], "allOrNothing": true`}</code></pre>
 
         <h3><code>IMAGE_LABEL</code> · Etiquetar una imatge</h3>

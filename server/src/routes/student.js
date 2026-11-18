@@ -3,7 +3,7 @@ const { z } = require('zod');
 const crypto = require('crypto');
 const prisma = require('../db');
 const classroom = require('../services/classroom');
-const { scoreQuestion, computeAttemptScore, shuffle, isAnswered, getInvalidNumericFields } = require('../grading');
+const { scoreQuestion, computeAttemptScore, shuffle, isAnswered, getInvalidNumericFields, initialOrderingAnswer } = require('../grading');
 const { requireAuth, impersonatorId } = require('../auth');
 const { instantiate, personalize } = require('../grading/calculated');
 
@@ -174,6 +174,11 @@ router.get('/attempts/:aid', wrap(async (req, res) => {
     out.questions = questions.map((q) => studentQuestion(q, a.seed));
     out.groups = a.quiz.groups;
     out.answers = Object.fromEntries(a.answers.map((x) => [x.questionId, { value: JSON.parse(x.value), fileUrl: x.fileUrl }]));
+    for (const q of a.quiz.questions) {
+      if (q.type === 'ORDERING' && !out.answers[q.id]) {
+        out.answers[q.id] = { value: initialOrderingAnswer(q, a.seed), fileUrl: null };
+      }
+    }
   }
   res.json(out);
 }));
@@ -207,7 +212,8 @@ router.post('/attempts/:aid/submit', wrap(async (req, res) => {
   const byQ = new Map(a.answers.map((x) => [x.questionId, x]));
   const invalidNumeric = a.quiz.questions.flatMap((question) => {
     const answer = byQ.get(question.id);
-    const fields = getInvalidNumericFields({ ...question, config: JSON.parse(question.config) }, answer ? JSON.parse(answer.value) : null);
+    const value = answer ? JSON.parse(answer.value) : initialOrderingAnswer(question, a.seed);
+    const fields = getInvalidNumericFields({ ...question, config: JSON.parse(question.config) }, value);
     return fields.length ? [{ questionId: question.id, fields }] : [];
   });
   if (invalidNumeric.length) return res.status(422).json({ error: 'Algunes respostes han de ser nombres vàlids', invalidNumeric });
@@ -215,8 +221,9 @@ router.post('/attempts/:aid/submit', wrap(async (req, res) => {
     .filter((q) => {
       if (!q.required) return false;
       const x = byQ.get(q.id);
-      if (!x) return true;
-      return !(q.type === 'IMAGE_UPLOAD' ? !!x.fileUrl : isAnswered(q.type, JSON.parse(x.value)));
+      const value = x ? JSON.parse(x.value) : initialOrderingAnswer(q, a.seed);
+      if (!x && value === null) return true;
+      return !(q.type === 'IMAGE_UPLOAD' ? !!x.fileUrl : isAnswered(q.type, value));
     })
     .map((q) => q.id);
   if (missing.length) return res.status(422).json({ error: 'Falten preguntes obligatòries', missing });
@@ -224,14 +231,14 @@ router.post('/attempts/:aid/submit', wrap(async (req, res) => {
   const scored = new Map();
   for (const q of a.quiz.questions) {
     const x = byQ.get(q.id);
-    const value = x ? JSON.parse(x.value) : null;
+    const value = x ? JSON.parse(x.value) : initialOrderingAnswer(q, a.seed);
     const r = scoreQuestion({ ...q, answerKey: JSON.parse(q.answerKey), seed: a.seed }, q.type === 'IMAGE_UPLOAD' ? !!x?.fileUrl : value, a.quiz.negativePenalty);
     const data = { score: r.manual ? null : r.score, needsReview: !!(r.manual && r.answered), questionGradingVersion: q.gradingVersion };
     if (r.manual && !r.answered) data.score = 0;
     const saved = await prisma.answer.upsert({
       where: { attemptId_questionId: { attemptId: a.id, questionId: q.id } },
       update: data,
-      create: { attemptId: a.id, questionId: q.id, ...data },
+      create: { attemptId: a.id, questionId: q.id, value: JSON.stringify(value), ...data },
     });
     scored.set(q.id, saved);
   }

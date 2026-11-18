@@ -194,4 +194,13 @@ function shuffle(arr, seed) {
   return a;
 }
 
-module.exports = { gradeQuestion, scoreQuestion, computeAttemptScore, shuffle, isAnswered, getInvalidNumericFields, MANUAL_TYPES, norm };
+function initialOrderingAnswer(question, seed) {
+  if (question.type !== 'ORDERING') return null;
+  const config = typeof question.config === 'string' ? JSON.parse(question.config) : question.config || {};
+  const items = question.shuffleOptions
+    ? shuffle(config.items, seed + question.id * 31)
+    : config.items;
+  return items.map((item) => item.id);
+}
+
+module.exports = { gradeQuestion, scoreQuestion, computeAttemptScore, shuffle, isAnswered, getInvalidNumericFields, initialOrderingAnswer, MANUAL_TYPES, norm };

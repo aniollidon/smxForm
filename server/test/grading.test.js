@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { scoreQuestion, computeAttemptScore, shuffle, getInvalidNumericFields } = require('../src/grading');
+const { scoreQuestion, computeAttemptScore, shuffle, getInvalidNumericFields, initialOrderingAnswer } = require('../src/grading');
 
 const q = (type, answerKey, points = 2) => ({ id: 1, type, points, answerKey });
 
@@ -39,6 +39,21 @@ test('ORDERING dona puntuació parcial pels elements ben posicionats', () => {
   const strict = q('ORDERING', { order: ['a', 'b', 'c', 'd'], allOrNothing: true });
   assert.strictEqual(scoreQuestion(strict, ['a', 'b', 'c', 'd']).score, 2);
   assert.strictEqual(scoreQuestion(strict, ['a', 'b', 'd', 'c']).score, 0);
+});
+
+test('ORDERING considera resposta l’ordre inicial mostrat, també quan és aleatori', () => {
+  const question = {
+    ...q('ORDERING', { order: ['a', 'b', 'c'] }),
+    config: JSON.stringify({ items: [{ id: 'a' }, { id: 'b' }, { id: 'c' }] }),
+    shuffleOptions: true,
+  };
+  const initialAnswer = initialOrderingAnswer(question, 7);
+  assert.deepStrictEqual(initialAnswer, shuffle(JSON.parse(question.config).items, 7 + question.id * 31).map((item) => item.id));
+  assert.strictEqual(scoreQuestion(question, initialAnswer).answered, true);
+
+  const alreadyCorrect = { ...question, answerKey: { order: initialAnswer } };
+  assert.strictEqual(scoreQuestion(alreadyCorrect, initialAnswer).score, question.points);
+  assert.deepStrictEqual(initialOrderingAnswer({ ...question, shuffleOptions: false }, 7), ['a', 'b', 'c']);
 });
 
 test('IMAGE_LABEL i SHORT_TEXT normalitzats', () => {
