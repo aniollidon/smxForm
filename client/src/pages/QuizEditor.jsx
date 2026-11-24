@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, fileUrl, upload } from '../api';
@@ -469,6 +469,7 @@ export default function QuizEditor() {
   const { data: quiz, isLoading, error } = useQuery({ queryKey: ['quiz-edit', id], queryFn: () => api(`/api/teacher/quizzes/${id}`) });
   const [editing, setEditing] = useState(null); // draft o null
   const [editingGroup, setEditingGroup] = useState(null); // grup on s'afegeix la pregunta nova
+  const questionToReveal = useRef(null);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState('');
   const [importBusy, setImportBusy] = useState(false);
@@ -481,12 +482,20 @@ export default function QuizEditor() {
     qc.invalidateQueries({ queryKey: ['subjects'] });
     qc.invalidateQueries({ queryKey: ['quizzes'] });
   };
+  useLayoutEffect(() => {
+    if (editing) return;
+    const qid = questionToReveal.current;
+    if (qid === null) return;
+    questionToReveal.current = null;
+    document.getElementById(`quiz-question-${qid}`)?.scrollIntoView({ block: 'nearest' });
+  }, [editing]);
   if (isLoading) return <p>Carregant…</p>;
   if (error) return <p className="error">{error.message}</p>;
 
   const closeEditor = () => { setEditing(null); setEditingGroup(null); };
   const save = async (payload, qid) => {
     await api(qid ? `/api/teacher/questions/${qid}` : `/api/teacher/quizzes/${id}/questions`, { method: qid ? 'PUT' : 'POST', body: qid || editingGroup === null ? payload : { ...payload, groupId: editingGroup } });
+    if (qid) questionToReveal.current = qid;
     closeEditor();
     refresh();
   };
@@ -532,7 +541,7 @@ export default function QuizEditor() {
   const questionRow = (q, inGroup, controls, menu = []) => (editing?.id === q.id ? (
     <QuestionEditor key={q.id} initial={editing} onSave={save} onCancel={closeEditor} linkChoices={linkChoicesFor(editing)} />
   ) : (
-    <div className={`${inGroup ? 'group-member' : 'card'} row between quiz-question-row`}>
+    <div id={`quiz-question-${q.id}`} className={`${inGroup ? 'group-member' : 'card'} row between quiz-question-row`}>
       <div className="quiz-question-summary">
         <span className="badge quiz-question-type">{TYPE_LABELS[q.type]}</span>
         <div className="review-question-title"><span className="review-question-number">{String(numberOf.get(q.id)).padStart(2, '0')}</span><span className="quiz-question-prompt">{q.text.slice(0, 100)} <span className="muted">({formatGrade(q.points)} pt{q.required ? ', obligatòria' : ''})</span></span></div>
