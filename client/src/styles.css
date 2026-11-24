@@ -270,6 +270,12 @@ html[data-a11y] .export-log { font-size: 1em; line-height: 1.5; }
 .grade-warning-panel { margin: 0 0 18px; padding: 16px 18px; border: 1px solid #78602e; border-left: 3px solid #d6ac52; background: #302a1d; color: #f2dfac; }
 .grade-warning-panel strong { display: block; margin-bottom: 7px; color: #f4d88e; }
 .grade-warning-panel p { margin: 5px 0 12px; color: #d3c6a4; font-size: 13px; }
+.ai-grading-panel { margin-bottom: 18px; }
+.ai-grading-panel h3 { margin: 0 0 6px; }
+.ai-grading-panel progress { width: 100%; accent-color: var(--blue); }
+.ai-grading-results { display: grid; gap: 10px; padding-left: 20px; }
+.ai-grading-results li { overflow-wrap: anywhere; }
+.ai-grading-results li span { display: block; font-size: 12px; }
 .data-panel > .empty-state { margin: 0; padding: 18px 0 3px; border-top: 1px solid var(--surface-line); }
 .badge { display: inline-flex; min-height: 22px; align-items: center; padding: 2px 8px; border: 1px solid #484848; border-radius: 2px; background: #333; color: #d2d0cc; font-family: var(--mono); font-size: 10px; }
 

@@ -8,6 +8,7 @@ const { countBlanks } = require('../grading/blanks');
 const { regradeAttempt, getGradingStatus } = require('../grading/regrade');
 const { evaluateAnswers, llmOptions } = require('../services/llm');
 const exportJobs = require('../services/exportJobs');
+const aiGradingJobs = require('../services/aiGradingJobs');
 const { validateDefinition, personalize, parseAnswer } = require('../grading/calculated');
 const { requireTeacher } = require('../auth');
 const { describeAnswer } = require('../services/linkedAnswer');
@@ -548,10 +549,16 @@ router.put('/questions/:qid/grading-criteria', wrap(async (req, res) => {
   res.json({ gradingCriteria: updated.gradingCriteria, gradingWebSearch: updated.gradingWebSearch });
 }));
 
-router.post('/questions/:qid/ai-grade', wrap(async (req, res) => {
-  const question = await ownQuestion(req);
+function validAiValue(type, value, config) {
+  if (type !== 'TABLE') return typeof value === 'string' && !!value.trim();
+  return Array.isArray(value) && value.length === config.rows.length
+    && value.every((row) => Array.isArray(row) && row.length === config.columns.length
+      && row.every((cell) => typeof cell === 'string' && cell.length <= 1000))
+    && value.some((row) => row.some((cell) => cell.trim()));
+}
+
+async function gradeAnswers(question, body, { pendingOnly = false } = {}) {
   if (!['SHORT_TEXT', 'LONG_TEXT', 'TABLE'].includes(question.type)) throw fail(400, 'L’avaluació assistida només està disponible per a respostes de text i taules');
-  const body = z.object({ answerIds: z.array(z.number().int().positive()).min(1).max(100), model: z.string().max(100).optional(), webSearch: z.boolean().optional().default(false) }).parse(req.body);
   if (new Set(body.answerIds).size !== body.answerIds.length) throw fail(400, 'La selecció conté respostes duplicades');
   const answers = await prisma.answer.findMany({
     where: {
@@ -577,12 +584,7 @@ router.post('/questions/:qid/ai-grade', wrap(async (req, res) => {
     const answer = answerById.get(answerId);
     const value = JSON.parse(answer.value);
     if (question.type === 'TABLE') {
-      const validTable = Array.isArray(value)
-        && value.length === questionConfig.rows.length
-        && value.every((row) => Array.isArray(row)
-          && row.length === questionConfig.columns.length
-          && row.every((cell) => typeof cell === 'string' && cell.length <= 1000));
-      if (!validTable || !value.some((row) => row.some((cell) => cell.trim()))) throw fail(400, 'No es poden avaluar respostes de taula buides o invàlides');
+      if (!validAiValue(question.type, value, questionConfig)) throw fail(400, 'No es poden avaluar respostes de taula buides o invàlides');
       return {
         answerId: answer.id,
         value: {
@@ -592,7 +594,7 @@ router.post('/questions/:qid/ai-grade', wrap(async (req, res) => {
         ...linkedContext(answer),
       };
     }
-    if (typeof value !== 'string' || !value.trim()) throw fail(400, 'No es poden avaluar respostes buides o no textuals');
+    if (!validAiValue(question.type, value, questionConfig)) throw fail(400, 'No es poden avaluar respostes buides o no textuals');
     return { answerId: answer.id, value, ...linkedContext(answer) };
   });
 
@@ -623,34 +625,135 @@ router.post('/questions/:qid/ai-grade', wrap(async (req, res) => {
     }));
     traces.push({ trace, answerIds: batch.map((answer) => answer.answerId) });
   }
-  // Una fila per crida: el prompt i la resposta crua es desen un sol cop per lot.
-  const runIds = new Map();
-  for (const { trace, answerIds } of traces) {
-    if (!trace) continue;
-    const run = await prisma.llmRun.create({
-      data: { questionId: question.id, provider, model, webSearch, prompt: trace.prompt, response: trace.response },
-    });
-    for (const answerId of answerIds) runIds.set(answerId, run.id);
-  }
-  const affectedAttemptIds = [...new Set(answers.map((answer) => answer.attemptId))];
-  await prisma.$transaction(async (tx) => {
-    for (const evaluation of evaluations) {
-      await tx.answer.update({
-        where: { id: evaluation.answerId },
-        data: {
-          score: evaluation.score,
-          feedback: evaluation.feedback,
-          needsReview: false,
-          manuallyReviewed: false,
-          llmReviewed: true,
-          llmRunId: runIds.get(evaluation.answerId) ?? null,
-          questionGradingVersion: question.gradingVersion,
-        },
-      });
+  const savedIds = await prisma.$transaction(async (tx) => {
+    if (pendingOnly) {
+      const current = await tx.question.findUnique({ where: { id: question.id } });
+      if (!current || current.gradingVersion !== question.gradingVersion
+        || current.gradingCriteria !== question.gradingCriteria || current.gradingWebSearch !== question.gradingWebSearch) {
+        throw fail(409, 'La pregunta o els criteris han canviat durant l’avaluació');
+      }
     }
+    const runIds = new Map();
+    for (const { trace, answerIds } of traces) {
+      if (!trace) continue;
+      const run = await tx.llmRun.create({
+        data: { questionId: question.id, provider, model, webSearch, prompt: trace.prompt, response: trace.response },
+      });
+      for (const answerId of answerIds) runIds.set(answerId, run.id);
+    }
+    const saved = [];
+    for (const evaluation of evaluations) {
+      const data = {
+        score: evaluation.score,
+        feedback: evaluation.feedback,
+        needsReview: false,
+        manuallyReviewed: false,
+        llmReviewed: true,
+        llmRunId: runIds.get(evaluation.answerId) ?? null,
+        questionGradingVersion: question.gradingVersion,
+      };
+      if (pendingOnly) {
+        const result = await tx.answer.updateMany({
+          where: { id: evaluation.answerId, needsReview: true, value: answerById.get(evaluation.answerId).value, attempt: { status: { not: 'IN_PROGRESS' } } },
+          data,
+        });
+        if (result.count) saved.push(evaluation.answerId);
+      } else {
+        await tx.answer.update({ where: { id: evaluation.answerId }, data });
+        saved.push(evaluation.answerId);
+      }
+    }
+    const affectedAttemptIds = [...new Set(saved.map((answerId) => answerById.get(answerId).attemptId))];
     for (const attemptId of affectedAttemptIds) await recomputeAttempt(attemptId, tx);
+    return saved;
   });
-  res.json({ evaluations: evaluations.map(({ answerId }) => ({ answerId, llmReviewed: true })) });
+  return { evaluations: savedIds.map((answerId) => ({ answerId, llmReviewed: true })) };
+}
+
+router.post('/questions/:qid/ai-grade', wrap(async (req, res) => {
+  const question = await ownQuestion(req);
+  const body = z.object({ answerIds: z.array(z.number().int().positive()).min(1).max(100), model: z.string().max(100).optional(), webSearch: z.boolean().optional().default(false) }).parse(req.body);
+  res.json(await gradeAnswers(question, body));
+}));
+
+function validAiAnswer(question, answer) {
+  let value;
+  try {
+    value = JSON.parse(answer.value);
+  } catch (error) {
+    if (!(error instanceof SyntaxError)) throw error;
+    return false;
+  }
+  return validAiValue(question.type, value, question.type === 'TABLE' ? JSON.parse(question.config) : null);
+}
+
+async function gradePendingQuiz(job) {
+  const questions = await prisma.question.findMany({
+    where: { quizId: job.quizId },
+    include: { answers: { where: { needsReview: true, attempt: { status: { not: 'IN_PROGRESS' } } }, select: { id: true, value: true } } },
+    orderBy: { order: 'asc' },
+  });
+  const groups = questions.map((question, index) => ({ question, number: index + 1 })).filter(({ question }) => question.answers.length);
+  job.questions = groups.map(({ question, number }) => ({
+    id: question.id, number, text: question.text, total: question.answers.length,
+    done: 0, graded: 0, skipped: 0, failed: 0, state: 'waiting', detail: '',
+  }));
+  job.total = job.questions.reduce((total, row) => total + row.total, 0);
+
+  const count = (row, field, amount) => {
+    row[field] += amount;
+    job[field] += amount;
+    row.done += amount;
+    job.done += amount;
+  };
+  for (let index = 0; index < groups.length; index += 1) {
+    const { question } = groups[index];
+    const row = job.questions[index];
+    row.state = 'running';
+    try {
+      if (!['SHORT_TEXT', 'LONG_TEXT', 'TABLE'].includes(question.type)) {
+        row.detail = 'Tipus de pregunta no compatible amb LLM; requereix revisió manual.';
+        count(row, 'skipped', row.total);
+      } else {
+        const valid = question.answers.filter((answer) => validAiAnswer(question, answer));
+        if (valid.length !== row.total) {
+          row.detail = 'Les respostes buides o invàlides requereixen revisió manual.';
+          count(row, 'skipped', row.total - valid.length);
+        }
+        for (let offset = 0; offset < valid.length; offset += 20) {
+          const batch = valid.slice(offset, offset + 20);
+          const stillPending = await prisma.answer.findMany({
+            where: { id: { in: batch.map((answer) => answer.id) }, questionId: question.id, needsReview: true, attempt: { status: { not: 'IN_PROGRESS' } } },
+            select: { id: true },
+          });
+          count(row, 'skipped', batch.length - stillPending.length);
+          if (!stillPending.length) continue;
+          const result = await gradeAnswers(question, {
+            answerIds: stillPending.map((answer) => answer.id), webSearch: question.gradingWebSearch,
+          }, { pendingOnly: true });
+          count(row, 'graded', result.evaluations.length);
+          count(row, 'skipped', stillPending.length - result.evaluations.length);
+        }
+      }
+      row.state = 'done';
+    } catch (error) {
+      row.detail = error.message;
+      count(row, 'failed', row.total - row.done);
+      row.state = 'error';
+    }
+    job.updatedAt = Date.now();
+  }
+}
+
+router.post('/quizzes/:id/ai-grade/job', wrap(async (req, res) => {
+  const quiz = await ownQuiz(req);
+  const job = aiGradingJobs.start(quiz.id, req.user.id, gradePendingQuiz);
+  res.status(202).json(aiGradingJobs.snapshot(job));
+}));
+
+router.get('/quizzes/:id/ai-grade/job', wrap(async (req, res) => {
+  const quiz = await ownQuiz(req);
+  res.json(aiGradingJobs.snapshot(aiGradingJobs.get(quiz.id, req.user.id)));
 }));
 
 router.post('/questions/:qid/manual-grade', wrap(async (req, res) => {

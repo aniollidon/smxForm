@@ -48,6 +48,8 @@ En actualitzar una instal·lació existent, executa `cd server && npx prisma db 
 ### Correcció amb LLM
 Els criteris de correcció i l'opció de permetre la cerca web es desen per pregunta, amb el botó de desar o en iniciar una avaluació. La cerca web està desactivada per defecte.
 
+Des de l'editor de l'entrega es poden avaluar totes les respostes pendents compatibles amb LLM amb el model predeterminat i els criteris i l'opció de cerca desats de cada pregunta. El progrés mostra el resultat i els errors per pregunta; les respostes buides, invàlides o de tipus no compatible queden pendents de revisió manual. El procés continua en segon pla si es tanca la pantalla, però s'interromp en reiniciar el servidor i es pot tornar a iniciar per a les respostes encara pendents. El progrés es desa en memòria i requereix una sola instància del servidor.
+
 En actualitzar una instal·lació existent, executa `cd server && npx prisma db push` abans de reiniciar el servidor per afegir l'opció de cerca web a la base de dades.
 
 ## Classroom
@@ -58,6 +60,3 @@ L'exportació es fa en un procés en segon pla que el navegador consulta cada 50
 
 ## Tests
 `cd server && npm test` (motor de correcció).
-
-## Pendent
-Correcció amb IA de respostes lliures (es corregeixen manualment de moment).

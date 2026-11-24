@@ -12,6 +12,7 @@ import { toPayload } from '../questionModel.js';
 import { formatGrade } from '../formatGrade.js';
 import { usePrompt } from '../components/PromptProvider.jsx';
 import ExportProgressDialog from '../components/ExportProgressDialog.jsx';
+import AiGradingPanel from '../components/AiGradingPanel.jsx';
 import { useExportJob } from '../useExportJob.js';
 
 const toLocal = (iso) => (iso ? new Date(new Date(iso) - new Date(iso).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '');
@@ -674,6 +675,7 @@ export default function QuizEditor() {
           </div>
         </div>
       )}
+      <AiGradingPanel quizId={id} pendingReview={quiz.gradingStatus?.pendingReview || 0} />
       <section className="quiz-editor-section">
         <div className="panel-heading">
           <div><span className="eyebrow">01 / PARAMETRES</span><h2>Detalls i avaluació</h2></div>
