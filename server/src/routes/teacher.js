@@ -540,12 +540,12 @@ router.get('/questions/:qid/answers', wrap(async (req, res) => {
 router.put('/questions/:qid/grading-criteria', wrap(async (req, res) => {
   const question = await ownQuestion(req);
   if (!['SHORT_TEXT', 'LONG_TEXT', 'TABLE'].includes(question.type)) throw fail(400, 'L’avaluació assistida només està disponible per a respostes de text i taules');
-  const body = z.object({ criteria: z.string().max(5000) }).parse(req.body);
+  const body = z.object({ criteria: z.string().max(5000), webSearch: z.boolean().optional() }).parse(req.body);
   const updated = await prisma.question.update({
     where: { id: question.id },
-    data: { gradingCriteria: body.criteria.trim() || null },
+    data: { gradingCriteria: body.criteria.trim() || null, ...(body.webSearch !== undefined && { gradingWebSearch: body.webSearch }) },
   });
-  res.json({ gradingCriteria: updated.gradingCriteria });
+  res.json({ gradingCriteria: updated.gradingCriteria, gradingWebSearch: updated.gradingWebSearch });
 }));
 
 router.post('/questions/:qid/ai-grade', wrap(async (req, res) => {

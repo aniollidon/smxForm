@@ -152,6 +152,7 @@ export default function QuestionReview() {
   });
   const [model, setModel] = useState('');
   const [webSearch, setWebSearch] = useState(false);
+  const [savedWebSearch, setSavedWebSearch] = useState(false);
   const [llmDetail, setLlmDetail] = useState(null);
   const models = llm?.models || [];
   const selectedModel = models.includes(model) ? model : models[0] || '';
@@ -162,6 +163,12 @@ export default function QuestionReview() {
     setCriteria(currentCriteria);
     setSavedCriteria(currentCriteria);
   }, [data?.question?.id, data?.question?.gradingCriteria]);
+
+  useEffect(() => {
+    if (!data?.question) return;
+    setWebSearch(data.question.gradingWebSearch);
+    setSavedWebSearch(data.question.gradingWebSearch);
+  }, [data?.question?.id, data?.question?.gradingWebSearch]);
 
   useEffect(() => {
     if (!data?.question) return;
@@ -183,7 +190,7 @@ export default function QuestionReview() {
   const selectionLimitExceeded = selectedAnswers.length > 100;
   const supportsAiGrading = ['SHORT_TEXT', 'LONG_TEXT', 'TABLE'].includes(data.question.type);
   const bulkScoreIsValid = bulkScore !== '' && Number.isFinite(Number(bulkScore)) && Number(bulkScore) >= 0 && Number(bulkScore) <= data.question.points;
-  const criteriaChanged = criteria.trim() !== savedCriteria;
+  const criteriaChanged = criteria.trim() !== savedCriteria || webSearch !== savedWebSearch;
   const refresh = () => Promise.all([
     queryClient.invalidateQueries({ queryKey: ['question-answers', qid] }),
     queryClient.invalidateQueries({ queryKey: ['attempt-review'] }),
@@ -196,13 +203,15 @@ export default function QuestionReview() {
     try {
       const result = await api(`/api/teacher/questions/${qid}/grading-criteria`, {
         method: 'PUT',
-        body: { criteria },
+        body: { criteria, webSearch },
       });
       const next = result.gradingCriteria || defaultCriteria;
       setCriteria(next);
       setSavedCriteria(next);
+      setWebSearch(result.gradingWebSearch);
+      setSavedWebSearch(result.gradingWebSearch);
       await queryClient.invalidateQueries({ queryKey: ['question-answers', qid] });
-      setActionMessage('Criteris desats.');
+      setActionMessage('Criteris i opcions desats.');
     } catch (e) {
       setActionError(e.message);
     } finally {
@@ -217,11 +226,13 @@ export default function QuestionReview() {
       if (criteriaChanged) {
         const saved = await api(`/api/teacher/questions/${qid}/grading-criteria`, {
           method: 'PUT',
-          body: { criteria },
+          body: { criteria, webSearch },
         });
         const next = saved.gradingCriteria || defaultCriteria;
         setCriteria(next);
         setSavedCriteria(next);
+        setWebSearch(saved.gradingWebSearch);
+        setSavedWebSearch(saved.gradingWebSearch);
       }
       const result = await api(`/api/teacher/questions/${qid}/ai-grade`, {
         method: 'POST',
@@ -330,7 +341,7 @@ export default function QuestionReview() {
       {gradingMode === 'llm' && supportsAiGrading && (
         <section className="question-ai-grading">
           <label className="question-ai-criteria">Criteris de correcció
-            <textarea maxLength={5000} value={criteria} onChange={(event) => setCriteria(event.target.value)} />
+            <textarea maxLength={5000} value={criteria} disabled={savingCriteria || gradingWithAi} onChange={(event) => setCriteria(event.target.value)} />
           </label>
           <div className="question-ai-options">
             {models.length > 1 && (
@@ -341,7 +352,7 @@ export default function QuestionReview() {
               </label>
             )}
             <label className="question-ai-model">
-              <input type="checkbox" checked={webSearch} disabled={gradingWithAi} onChange={(event) => setWebSearch(event.target.checked)} />
+              <input type="checkbox" checked={webSearch} disabled={savingCriteria || gradingWithAi} onChange={(event) => setWebSearch(event.target.checked)} />
               Permetre cerca web al model
             </label>
           </div>
@@ -359,7 +370,7 @@ export default function QuestionReview() {
           </div>
           <div className="question-ai-actions">
             <button className="secondary" onClick={saveCriteria} disabled={!criteriaChanged || savingCriteria || gradingWithAi}>
-              {savingCriteria ? 'Desant criteris…' : 'Desa criteris'}
+              {savingCriteria ? 'Desant…' : 'Desa criteris i opcions'}
             </button>
             <button onClick={evaluateSelectedWithLlm} disabled={!selectedLlmAnswers.length || selectionLimitExceeded || savingCriteria || gradingWithAi}>
               {gradingWithAi ? 'Avaluant selecció…' : `Avalua ${selectedLlmAnswers.length} seleccionades`}

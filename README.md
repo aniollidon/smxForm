@@ -45,6 +45,11 @@ Cada entrega té una classe (assignatura) per organitzar la biblioteca del profe
 
 En actualitzar una instal·lació existent, executa `cd server && npx prisma db push` abans de reiniciar el servidor per afegir el camp amb el valor predeterminat «General».
 
+### Correcció amb LLM
+Els criteris de correcció i l'opció de permetre la cerca web es desen per pregunta, amb el botó de desar o en iniciar una avaluació. La cerca web està desactivada per defecte.
+
+En actualitzar una instal·lació existent, executa `cd server && npx prisma db push` abans de reiniciar el servidor per afegir l'opció de cerca web a la base de dades.
+
 ## Classroom
 El professor connecta Classroom des de l'editor de l'entrega, tria el curs i es crea una tasca (esborrany) amb el mateix nom i l'enllaç al quiz. Cal publicar-la al Classroom: l'accés a l'enllaç només es permet als alumnes amb la tasca assignada i mentre sigui publicada i dins del termini. «Exporta notes» envia la nota (millor o última) a cada alumne.
 
